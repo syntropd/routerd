@@ -41,7 +41,11 @@ impl OpenAICompatibleAdapter {
     fn chat_endpoint(&self) -> String {
         if self.base_url.ends_with("/chat/completions") {
             self.base_url.clone()
-        } else if self.base_url.ends_with("/v1") {
+        } else if self.base_url.ends_with("/v1")
+            || self.base_url.ends_with("/openai")
+            || self.base_url.ends_with("/v1beta")
+            || self.base_url.ends_with("/v1alpha")
+        {
             format!("{}/chat/completions", self.base_url)
         } else {
             format!("{}/v1/chat/completions", self.base_url)
@@ -49,7 +53,13 @@ impl OpenAICompatibleAdapter {
     }
 
     fn models_endpoint(&self) -> String {
-        if self.base_url.ends_with("/v1") {
+        if self.base_url.ends_with("/models") {
+            self.base_url.clone()
+        } else if self.base_url.ends_with("/v1")
+            || self.base_url.ends_with("/openai")
+            || self.base_url.ends_with("/v1beta")
+            || self.base_url.ends_with("/v1alpha")
+        {
             format!("{}/models", self.base_url)
         } else {
             format!("{}/v1/models", self.base_url)
@@ -189,7 +199,18 @@ impl ProviderAdapter for OpenAICompatibleAdapter {
             .await;
 
         match res {
-            Ok(resp) => Ok(resp.status().is_success() || resp.status().as_u16() == 401),
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    Ok(true)
+                } else if resp.status().as_u16() == 401 {
+                    Err(RouterError::ProviderUnavailable {
+                        provider: self.id.clone(),
+                        reason: "Authentication failed: 401 Unauthorized (check API key)".to_string(),
+                    })
+                } else {
+                    Ok(false)
+                }
+            }
             Err(_) => Ok(false),
         }
     }

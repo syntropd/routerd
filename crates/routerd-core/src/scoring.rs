@@ -15,7 +15,7 @@ pub struct RequestProfile {
 
 impl RequestProfile {
     pub fn from_request(req: &ChatCompletionRequest, default_tier: &str) -> Self {
-        let requested_tier = req
+        let mut requested_tier = req
             .requested_tier()
             .map(|t| t.to_string())
             .unwrap_or_else(|| default_tier.to_string());
@@ -25,6 +25,20 @@ impl RequestProfile {
             .max_completion_tokens
             .or(req.max_tokens)
             .unwrap_or(2048);
+
+        // Intelligent auto-tier classification: route long or reasoning-heavy prompts to hard tier
+        if requested_tier == "auto" {
+            let is_complex = prompt_tokens > 1200 || req.messages.iter().any(|m| {
+                let content = m.content_as_str().to_lowercase();
+                content.contains("reason")
+                    || content.contains("architect")
+                    || content.contains("derive")
+                    || content.contains("prove")
+                    || content.contains("refactor")
+                    || content.contains("complex")
+            });
+            requested_tier = if is_complex { "hard".to_string() } else { "fast".to_string() };
+        }
 
         Self {
             requested_model: req.model.clone(),
@@ -45,6 +59,7 @@ pub struct CandidateProvider {
     pub provider_id: String,
     pub provider_name: String,
     pub provider_kind: String,
+    pub provider_tier: String,
     pub provider_weight: f64,
     pub provider_enabled: bool,
     pub is_healthy: bool,
@@ -150,7 +165,13 @@ impl ScoringEngine {
             .model
             .tier
             .as_deref()
-            .unwrap_or(if cand.model.max_context_tokens > 64000 { "hard" } else { "fast" });
+            .unwrap_or(if !cand.provider_tier.is_empty() {
+                &cand.provider_tier
+            } else if cand.model.max_context_tokens > 64000 {
+                "hard"
+            } else {
+                "fast"
+            });
 
         let capability_score = if req.requested_tier == "hard" {
             if model_tier == "hard" {
@@ -261,6 +282,7 @@ mod tests {
             provider_id: id.to_string(),
             provider_name: id.to_string(),
             provider_kind: "openai".to_string(),
+            provider_tier: tier.to_string(),
             provider_weight: 1.0,
             provider_enabled: true,
             is_healthy: true,

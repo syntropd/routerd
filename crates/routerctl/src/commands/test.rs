@@ -17,26 +17,30 @@ pub async fn run_benchmark(
     }
 
     match client.test_benchmark(&args.model, &args.prompt, args.tier.as_deref()).await {
-        Ok((latency_ms, response_sample)) => {
+        Ok(bench) => {
             if json_output {
                 let obj = serde_json::json!({
-                    "model": args.model,
-                    "latency_ms": latency_ms,
-                    "response": response_sample,
+                    "model": bench.model,
+                    "ttft_ms": bench.ttft_ms,
+                    "total_latency_ms": bench.total_latency_ms,
+                    "chunks": bench.chunks,
+                    "response": bench.content,
                     "success": true
                 });
                 println!("{}", serde_json::to_string_pretty(&obj)?);
             } else {
                 println!(
-                    "{} Latency: {:.1} ms",
+                    "{} TTFT: {:.1} ms | Total Latency: {:.1} ms (chunks: {})",
                     "Success:".bold().green(),
-                    latency_ms
+                    bench.ttft_ms,
+                    bench.total_latency_ms,
+                    bench.chunks
                 );
-                if !response_sample.is_empty() {
-                    let preview = if response_sample.len() > 120 {
-                        format!("{}...", &response_sample[..120])
+                if !bench.content.is_empty() {
+                    let preview = if bench.content.len() > 120 {
+                        format!("{}...", &bench.content[..120])
                     } else {
-                        response_sample
+                        bench.content
                     };
                     println!("  Response preview: \"{}\"", preview.dimmed());
                 }

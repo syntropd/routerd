@@ -39,7 +39,9 @@ impl MiniMaxAdapter {
     }
 
     fn endpoint(&self) -> String {
-        if self.base_url.ends_with("/chat/completions") {
+        if self.base_url.ends_with("/chat/completions")
+            || self.base_url.ends_with("/chatcompletion_v2")
+        {
             self.base_url.clone()
         } else if self.base_url.ends_with("/v1") {
             format!("{}/chat/completions", self.base_url)
@@ -78,6 +80,12 @@ impl MiniMaxAdapter {
         }
         if let Some(max_tokens) = req.max_tokens.or(req.max_completion_tokens) {
             body["max_tokens"] = json!(max_tokens);
+        }
+
+        for (k, v) in &req.extra {
+            if k != "model" && k != "messages" && k != "stream" && k != "tier" {
+                body[k] = v.clone();
+            }
         }
 
         body
@@ -171,7 +179,18 @@ impl ProviderAdapter for MiniMaxAdapter {
             .await;
 
         match res {
-            Ok(resp) => Ok(resp.status().is_success() || resp.status().as_u16() == 405 || resp.status().as_u16() == 401),
+            Ok(resp) => {
+                if resp.status().is_success() || resp.status().as_u16() == 405 {
+                    Ok(true)
+                } else if resp.status().as_u16() == 401 {
+                    Err(RouterError::ProviderUnavailable {
+                        provider: self.id.clone(),
+                        reason: "Authentication failed: 401 Unauthorized (check API key)".to_string(),
+                    })
+                } else {
+                    Ok(false)
+                }
+            }
             Err(_) => Ok(false),
         }
     }

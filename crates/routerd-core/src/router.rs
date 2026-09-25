@@ -56,6 +56,22 @@ pub struct DaemonStatusInfo {
     pub healthy_providers_count: usize,
     pub psi_level: String,
     pub psi_memory_some: f32,
+    pub rss_bytes: u64,
+    pub rss_mb: f64,
+}
+
+pub fn read_rss_info() -> (u64, f64) {
+    if let Ok(statm) = std::fs::read_to_string("/proc/self/statm") {
+        let ps = rustix::param::page_size() as u64;
+        let mut parts = statm.split_whitespace();
+        let _size = parts.next();
+        let resident_pages: u64 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+        let rss_bytes = resident_pages * ps;
+        let rss_mb = rss_bytes as f64 / (1024.0 * 1024.0);
+        (rss_bytes, rss_mb)
+    } else {
+        (0, 0.0)
+    }
 }
 
 pub struct RouterEngine {
@@ -119,6 +135,25 @@ impl RouterEngine {
         let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg);
 
         if ranked.is_empty() {
+            let total_tokens = req_profile.total_tokens();
+            let mut max_limit = 0;
+            let mut context_exceeded = false;
+            for c in &candidates {
+                if c.provider_enabled {
+                    max_limit = max_limit.max(c.model.max_context_tokens);
+                    if total_tokens > c.model.max_context_tokens {
+                        context_exceeded = true;
+                    }
+                }
+            }
+            if context_exceeded && total_tokens > max_limit {
+                return Err(RouterError::ContextLimitExceeded {
+                    model: req_profile.requested_model,
+                    requested_tokens: total_tokens,
+                    context_limit: max_limit,
+                });
+            }
+
             return Err(RouterError::NoHealthyProvider(format!(
                 "No eligible provider found for model '{}' in tier '{}'",
                 req_profile.requested_model, req_profile.requested_tier
@@ -200,6 +235,25 @@ impl RouterEngine {
         let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg);
 
         if ranked.is_empty() {
+            let total_tokens = req_profile.total_tokens();
+            let mut max_limit = 0;
+            let mut context_exceeded = false;
+            for c in &candidates {
+                if c.provider_enabled {
+                    max_limit = max_limit.max(c.model.max_context_tokens);
+                    if total_tokens > c.model.max_context_tokens {
+                        context_exceeded = true;
+                    }
+                }
+            }
+            if context_exceeded && total_tokens > max_limit {
+                return Err(RouterError::ContextLimitExceeded {
+                    model: req_profile.requested_model,
+                    requested_tokens: total_tokens,
+                    context_limit: max_limit,
+                });
+            }
+
             return Err(RouterError::NoHealthyProvider(format!(
                 "No eligible provider found for model '{}' in tier '{}'",
                 req_profile.requested_model, req_profile.requested_tier
@@ -285,6 +339,7 @@ impl RouterEngine {
                     provider_id: entry.config.id.clone(),
                     provider_name: entry.config.name.clone(),
                     provider_kind: entry.config.kind.clone(),
+                    provider_tier: entry.config.tier.clone(),
                     provider_weight: entry.config.weight,
                     provider_enabled: entry.config.enabled,
                     is_healthy: stats.is_healthy,
@@ -396,6 +451,8 @@ impl RouterEngine {
             }
         }
 
+        let (rss_bytes, rss_mb) = read_rss_info();
+
         DaemonStatusInfo {
             status: "active".to_string(),
             version: "0.3.0".to_string(),
@@ -406,6 +463,8 @@ impl RouterEngine {
             healthy_providers_count: healthy_count,
             psi_level: format!("{:?}", psi.level),
             psi_memory_some: psi.memory_some_avg10,
+            rss_bytes,
+            rss_mb,
         }
     }
 

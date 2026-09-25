@@ -10,7 +10,7 @@ use bytes::Bytes;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
@@ -22,6 +22,7 @@ pub struct VarlinkBridgeAdapter {
     id: String,
     socket_path: PathBuf,
     configured_models: Vec<String>,
+    timeout: Duration,
 }
 
 impl VarlinkBridgeAdapter {
@@ -33,11 +34,13 @@ impl VarlinkBridgeAdapter {
         };
         let socket_path = PathBuf::from(p);
         let configured_models = cfg.models.iter().map(|m| m.name.clone()).collect();
+        let timeout = Duration::from_millis(cfg.timeout_ms.max(1000));
 
         Self {
             id: cfg.id.clone(),
             socket_path,
             configured_models,
+            timeout,
         }
     }
 
@@ -62,11 +65,13 @@ impl ProviderAdapter for VarlinkBridgeAdapter {
         let prompt = Self::extract_user_prompt(request);
         debug!("Varlink bridge [{}]: calling StreamInference non-streaming", self.id);
 
-        let stream = UnixStream::connect(&self.socket_path)
+        let stream = timeout(self.timeout, UnixStream::connect(&self.socket_path))
             .await
+            .map_err(|_| RouterError::Timeout("Varlink connection timed out".into()))?
             .map_err(|e| RouterError::Varlink(format!("Failed to connect to Varlink socket {:?}: {}", self.socket_path, e)))?;
 
-        let (mut reader, mut writer) = stream.into_split();
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
 
         let req = json!({
             "method": "io.syntrop.Inference1.StreamInference",
@@ -80,41 +85,47 @@ impl ProviderAdapter for VarlinkBridgeAdapter {
         let mut req_bytes = serde_json::to_vec(&req)?;
         req_bytes.push(0);
 
-        writer.write_all(&req_bytes).await.map_err(RouterError::Io)?;
+        timeout(self.timeout, writer.write_all(&req_bytes))
+            .await
+            .map_err(|_| RouterError::Timeout("Varlink write timed out".into()))?
+            .map_err(RouterError::Io)?;
 
         let mut accumulated_text = String::new();
         let mut buf = Vec::with_capacity(512);
-        let mut byte = [0u8; 1];
 
         loop {
-            let n = reader.read(&mut byte).await.map_err(RouterError::Io)?;
+            buf.clear();
+            let n = timeout(self.timeout, reader.read_until(0, &mut buf))
+                .await
+                .map_err(|_| RouterError::Timeout("Varlink bridge read timed out".into()))?
+                .map_err(RouterError::Io)?;
             if n == 0 {
                 break;
             }
-            if byte[0] == 0 {
-                if !buf.is_empty() {
-                    let reply: Value = serde_json::from_slice(&buf)?;
-                    if let Some(err) = reply.get("error").and_then(|e| e.as_str()) {
-                        return Err(RouterError::Varlink(format!("Varlink error: {}", err)));
-                    }
-                    if let Some(chunk) = reply
-                        .get("parameters")
-                        .and_then(|p| p.get("chunk"))
-                        .and_then(|c| c.as_str())
-                    {
-                        accumulated_text.push_str(chunk);
-                    }
-                    let continues = reply
-                        .get("continues")
-                        .and_then(|c| c.as_bool())
-                        .unwrap_or(false);
-                    buf.clear();
-                    if !continues {
-                        break;
-                    }
-                }
-            } else {
-                buf.push(byte[0]);
+            if buf.last() == Some(&0) {
+                buf.pop();
+            }
+            if buf.is_empty() {
+                continue;
+            }
+
+            let reply: Value = serde_json::from_slice(&buf)?;
+            if let Some(err) = reply.get("error").and_then(|e| e.as_str()) {
+                return Err(RouterError::Varlink(format!("Varlink error: {}", err)));
+            }
+            if let Some(chunk) = reply
+                .get("parameters")
+                .and_then(|p| p.get("chunk"))
+                .and_then(|c| c.as_str())
+            {
+                accumulated_text.push_str(chunk);
+            }
+            let continues = reply
+                .get("continues")
+                .and_then(|c| c.as_bool())
+                .unwrap_or(false);
+            if !continues {
+                break;
             }
         }
 
@@ -156,11 +167,13 @@ impl ProviderAdapter for VarlinkBridgeAdapter {
         let prompt = Self::extract_user_prompt(request);
         debug!("Varlink bridge [{}]: streaming StreamInference", self.id);
 
-        let stream = UnixStream::connect(&self.socket_path)
+        let stream = timeout(self.timeout, UnixStream::connect(&self.socket_path))
             .await
+            .map_err(|_| RouterError::Timeout("Varlink streaming connection timed out".into()))?
             .map_err(|e| RouterError::Varlink(format!("Failed to connect to Varlink socket {:?}: {}", self.socket_path, e)))?;
 
-        let (mut reader, mut writer) = stream.into_split();
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
 
         let req = json!({
             "method": "io.syntrop.Inference1.StreamInference",
@@ -174,89 +187,98 @@ impl ProviderAdapter for VarlinkBridgeAdapter {
         let mut req_bytes = serde_json::to_vec(&req)?;
         req_bytes.push(0);
 
-        writer.write_all(&req_bytes).await.map_err(RouterError::Io)?;
+        timeout(self.timeout, writer.write_all(&req_bytes))
+            .await
+            .map_err(|_| RouterError::Timeout("Varlink stream write timed out".into()))?
+            .map_err(RouterError::Io)?;
 
         let (tx, rx) = mpsc::channel::<Result<Bytes>>(32);
         let completion_id = format!("chatcmpl-varlink-{}", Uuid::new_v4());
         let model_str = target_model.to_string();
+        let stream_timeout = self.timeout;
 
         tokio::spawn(async move {
             let mut buf = Vec::with_capacity(512);
-            let mut byte = [0u8; 1];
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs();
 
             loop {
-                match reader.read(&mut byte).await {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        if byte[0] == 0 {
-                            if !buf.is_empty() {
-                                let reply_res: std::result::Result<Value, serde_json::Error> =
-                                    serde_json::from_slice(&buf);
-                                buf.clear();
+                buf.clear();
+                let read_res = timeout(stream_timeout, reader.read_until(0, &mut buf)).await;
+                match read_res {
+                    Ok(Ok(0)) => break,
+                    Ok(Ok(_)) => {
+                        if buf.last() == Some(&0) {
+                            buf.pop();
+                        }
+                        if buf.is_empty() {
+                            continue;
+                        }
 
-                                match reply_res {
-                                    Ok(reply) => {
-                                        if let Some(err) = reply.get("error").and_then(|e| e.as_str()) {
-                                            let _ = tx
-                                                .send(Err(RouterError::Varlink(format!("Varlink stream error: {}", err))))
-                                                .await;
-                                            break;
-                                        }
+                        let reply_res: std::result::Result<Value, serde_json::Error> =
+                            serde_json::from_slice(&buf);
 
-                                        let continues = reply
-                                            .get("continues")
-                                            .and_then(|c| c.as_bool())
-                                            .unwrap_or(false);
+                        match reply_res {
+                            Ok(reply) => {
+                                if let Some(err) = reply.get("error").and_then(|e| e.as_str()) {
+                                    let _ = tx
+                                        .send(Err(RouterError::Varlink(format!("Varlink stream error: {}", err))))
+                                        .await;
+                                    break;
+                                }
 
-                                        if let Some(chunk_text) = reply
-                                            .get("parameters")
-                                            .and_then(|p| p.get("chunk"))
-                                            .and_then(|c| c.as_str())
-                                        {
-                                            let chunk_obj = ChatCompletionChunk {
-                                                id: completion_id.clone(),
-                                                object: "chat.completion.chunk".to_string(),
-                                                created: now,
-                                                model: model_str.clone(),
-                                                choices: vec![ChunkChoice {
-                                                    index: 0,
-                                                    delta: ChunkDelta {
-                                                        role: None,
-                                                        content: Some(chunk_text.to_string()),
-                                                    },
-                                                    finish_reason: if continues { None } else { Some("stop".to_string()) },
-                                                }],
-                                            };
+                                let continues = reply
+                                    .get("continues")
+                                    .and_then(|c| c.as_bool())
+                                    .unwrap_or(false);
 
-                                            let sse_line = format!(
-                                                "data: {}\n\n",
-                                                serde_json::to_string(&chunk_obj).unwrap_or_default()
-                                            );
-                                            if tx.send(Ok(Bytes::from(sse_line))).await.is_err() {
-                                                break;
-                                            }
-                                        }
+                                if let Some(chunk_text) = reply
+                                    .get("parameters")
+                                    .and_then(|p| p.get("chunk"))
+                                    .and_then(|c| c.as_str())
+                                {
+                                    let chunk_obj = ChatCompletionChunk {
+                                        id: completion_id.clone(),
+                                        object: "chat.completion.chunk".to_string(),
+                                        created: now,
+                                        model: model_str.clone(),
+                                        choices: vec![ChunkChoice {
+                                            index: 0,
+                                            delta: ChunkDelta {
+                                                role: None,
+                                                content: Some(chunk_text.to_string()),
+                                            },
+                                            finish_reason: if continues { None } else { Some("stop".to_string()) },
+                                        }],
+                                    };
 
-                                        if !continues {
-                                            break;
-                                        }
-                                    }
-                                    Err(e) => {
-                                        let _ = tx.send(Err(RouterError::Json(e))).await;
+                                    let sse_line = format!(
+                                        "data: {}\n\n",
+                                        serde_json::to_string(&chunk_obj).unwrap_or_default()
+                                    );
+                                    if tx.send(Ok(Bytes::from(sse_line))).await.is_err() {
                                         break;
                                     }
                                 }
+
+                                if !continues {
+                                    break;
+                                }
                             }
-                        } else {
-                            buf.push(byte[0]);
+                            Err(e) => {
+                                let _ = tx.send(Err(RouterError::Json(e))).await;
+                                break;
+                            }
                         }
                     }
-                    Err(e) => {
+                    Ok(Err(e)) => {
                         let _ = tx.send(Err(RouterError::Io(e))).await;
+                        break;
+                    }
+                    Err(_) => {
+                        let _ = tx.send(Err(RouterError::Timeout("Varlink streaming chunk timed out".into()))).await;
                         break;
                     }
                 }

@@ -6,7 +6,7 @@ use protocol::{make_method_not_found, parse_request};
 use routerd_core::RouterEngine;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tracing::{debug, info, warn};
 
@@ -43,25 +43,22 @@ pub async fn run_varlink_listener(listener: UnixListener, engine: Arc<RouterEngi
 }
 
 async fn handle_varlink_connection(stream: UnixStream, engine: Arc<RouterEngine>) {
-    let (mut reader, mut writer) = stream.into_split();
+    let (reader, mut writer) = stream.into_split();
+    let mut reader = BufReader::new(reader);
     let mut buf = Vec::with_capacity(1024);
-    let mut byte = [0u8; 1];
 
     loop {
         buf.clear();
-        loop {
-            match reader.read(&mut byte).await {
-                Ok(0) => return, // Connection closed
-                Ok(_) => {
-                    if byte[0] == 0 {
-                        break;
-                    }
-                    buf.push(byte[0]);
+        match reader.read_until(0, &mut buf).await {
+            Ok(0) => return, // Connection closed
+            Ok(_) => {
+                if buf.last() == Some(&0) {
+                    buf.pop();
                 }
-                Err(e) => {
-                    debug!("Varlink stream read closed/error: {}", e);
-                    return;
-                }
+            }
+            Err(e) => {
+                debug!("Varlink stream read closed/error: {}", e);
+                return;
             }
         }
 

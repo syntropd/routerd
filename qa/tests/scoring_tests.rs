@@ -15,6 +15,7 @@ fn make_candidate(
         provider_id: id.to_string(),
         provider_name: id.to_string(),
         provider_kind: "openai".to_string(),
+        provider_tier: tier.to_string(),
         provider_weight: 1.0,
         provider_enabled: true,
         is_healthy: true,

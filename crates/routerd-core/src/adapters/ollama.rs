@@ -36,7 +36,13 @@ impl OllamaAdapter {
     }
 
     fn chat_endpoint(&self) -> String {
-        format!("{}/v1/chat/completions", self.base_url)
+        if self.base_url.ends_with("/chat/completions") {
+            self.base_url.clone()
+        } else if self.base_url.ends_with("/v1") {
+            format!("{}/chat/completions", self.base_url)
+        } else {
+            format!("{}/v1/chat/completions", self.base_url)
+        }
     }
 
     fn tags_endpoint(&self) -> String {
@@ -62,6 +68,12 @@ impl OllamaAdapter {
         }
         if let Some(max_tokens) = req.max_tokens.or(req.max_completion_tokens) {
             body["max_tokens"] = json!(max_tokens);
+        }
+
+        for (k, v) in &req.extra {
+            if k != "model" && k != "messages" && k != "stream" && k != "tier" {
+                body[k] = v.clone();
+            }
         }
 
         body

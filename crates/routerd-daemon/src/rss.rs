@@ -12,6 +12,17 @@ pub struct MemoryStats {
     pub page_size: usize,
 }
 
+extern "C" {
+    fn malloc_trim(pad: usize) -> i32;
+}
+
+/// Request glibc allocator to return unused heap memory pages back to the kernel immediately.
+pub fn trim_memory_pages() {
+    unsafe {
+        let _ = malloc_trim(0);
+    }
+}
+
 impl MemoryStats {
     pub fn read_current() -> Self {
         let ps = page_size();
@@ -24,8 +35,9 @@ impl MemoryStats {
             let virt = size_pages * ps as u64;
 
             if rss > RSS_TARGET_MAX_BYTES {
+                trim_memory_pages();
                 warn!(
-                    "Memory RSS threshold exceeded: {:.2} MB > 15 MB target",
+                    "Memory RSS threshold exceeded: {:.2} MB > 15 MB target, performed page trim",
                     rss as f64 / (1024.0 * 1024.0)
                 );
             }

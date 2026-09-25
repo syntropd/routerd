@@ -1,13 +1,24 @@
 use anyhow::{anyhow, Result};
+use futures::StreamExt;
 use reqwest::Client as HttpClient;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::time::Duration;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::time::{Duration, Instant};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::time::timeout;
 
 const RPC_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BenchmarkResult {
+    pub model: String,
+    pub ttft_ms: f64,
+    pub total_latency_ms: f64,
+    pub chunks: usize,
+    pub content: String,
+}
 
 pub struct RouterctlClient {
     socket_path: PathBuf,
@@ -21,7 +32,7 @@ impl RouterctlClient {
             socket_path: socket_path.into(),
             http_url: http_url.into().trim_end_matches('/').to_string(),
             http_client: HttpClient::builder()
-                .timeout(Duration::from_secs(10))
+                .timeout(Duration::from_secs(15))
                 .build()
                 .unwrap_or_default(),
         }
@@ -33,7 +44,8 @@ impl RouterctlClient {
             .map_err(|_| anyhow!("Connection to Varlink socket {:?} timed out", self.socket_path))?
             .map_err(|e| anyhow!("Failed to connect to {:?}: {}", self.socket_path, e))?;
 
-        let (mut reader, mut writer) = stream.into_split();
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
 
         let req = json!({
             "method": method,
@@ -48,22 +60,13 @@ impl RouterctlClient {
             .map_err(|_| anyhow!("Varlink write timed out"))??;
 
         let mut buf = Vec::with_capacity(1024);
-        let mut byte = [0u8; 1];
-
-        let read_future = async {
-            loop {
-                let n = reader.read(&mut byte).await?;
-                if n == 0 || byte[0] == 0 {
-                    break;
-                }
-                buf.push(byte[0]);
-            }
-            Ok::<(), std::io::Error>(())
-        };
-
-        timeout(RPC_TIMEOUT, read_future)
+        timeout(RPC_TIMEOUT, reader.read_until(0, &mut buf))
             .await
             .map_err(|_| anyhow!("Varlink read timed out"))??;
+
+        if buf.last() == Some(&0) {
+            buf.pop();
+        }
 
         if buf.is_empty() {
             return Err(anyhow!("Empty reply from routerd"));
@@ -153,8 +156,8 @@ impl RouterctlClient {
         model: &str,
         prompt: &str,
         tier: Option<&str>,
-    ) -> Result<(f64, String)> {
-        let start = std::time::Instant::now();
+    ) -> Result<BenchmarkResult> {
+        let start = Instant::now();
         let url = format!("{}/v1/chat/completions", self.http_url);
 
         let mut body = json!({
@@ -162,31 +165,66 @@ impl RouterctlClient {
             "messages": [
                 { "role": "user", "content": prompt }
             ],
-            "max_tokens": 64
+            "max_tokens": 64,
+            "stream": true
         });
         if let Some(t) = tier {
             body["tier"] = json!(t);
         }
 
         let resp = self.http_client.post(&url).json(&body).send().await?;
-        let latency_ms = start.elapsed().as_secs_f64() * 1000.0;
 
-        if !resp.status().is_success() {
+        let status = resp.status();
+        if !status.is_success() {
             let err_txt = resp.text().await.unwrap_or_default();
-            return Err(anyhow!("HTTP error: {}", err_txt));
+            return Err(anyhow!("HTTP {}: {}", status, err_txt));
         }
 
-        let val: Value = resp.json().await?;
-        let content = val
-            .get("choices")
-            .and_then(|c| c.get(0))
-            .and_then(|c0| c0.get("message"))
-            .and_then(|m| m.get("content"))
-            .and_then(|txt| txt.as_str())
-            .unwrap_or("")
-            .to_string();
+        let mut stream = resp.bytes_stream();
+        let mut first_token_instant = None;
+        let mut accumulated_content = String::new();
+        let mut chunk_count = 0usize;
 
-        Ok((latency_ms, content))
+        while let Some(chunk_res) = stream.next().await {
+            let chunk = chunk_res?;
+            let text = String::from_utf8_lossy(&chunk);
+            for line in text.lines() {
+                if let Some(data) = line.strip_prefix("data: ") {
+                    let trimmed = data.trim();
+                    if trimmed == "[DONE]" {
+                        continue;
+                    }
+                    if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
+                        if let Some(delta) = val
+                            .get("choices")
+                            .and_then(|c| c.get(0))
+                            .and_then(|c0| c0.get("delta"))
+                            .and_then(|d| d.get("content"))
+                            .and_then(|txt| txt.as_str())
+                        {
+                            if first_token_instant.is_none() && !delta.is_empty() {
+                                first_token_instant = Some(Instant::now());
+                            }
+                            accumulated_content.push_str(delta);
+                            chunk_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        let total_latency_ms = start.elapsed().as_secs_f64() * 1000.0;
+        let ttft_ms = first_token_instant
+            .map(|t| t.duration_since(start).as_secs_f64() * 1000.0)
+            .unwrap_or(total_latency_ms);
+
+        Ok(BenchmarkResult {
+            model: model.to_string(),
+            ttft_ms,
+            total_latency_ms,
+            chunks: chunk_count,
+            content: accumulated_content,
+        })
     }
 
     pub async fn get_info(&self) -> Result<Value> {

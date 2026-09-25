@@ -55,7 +55,9 @@ method GetStatus() -> (
   providers_count: int,
   healthy_providers_count: int,
   psi_level: string,
-  psi_memory_some: float
+  psi_memory_some: float,
+  rss_bytes: int,
+  rss_mb: float
 )
 
 method ListProviders() -> (

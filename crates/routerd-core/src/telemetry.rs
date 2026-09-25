@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
@@ -106,7 +106,8 @@ impl TelemetryClient {
             .map_err(|_| RouterError::Timeout("Inferenced connect timed out".into()))?
             .map_err(|e| RouterError::Varlink(format!("Failed to connect to inferenced: {}", e)))?;
 
-        let (mut reader, mut writer) = stream.into_split();
+        let (reader, mut writer) = stream.into_split();
+        let mut reader = BufReader::new(reader);
 
         let req = json!({
             "method": "io.syntrop.Inference1.GetPressure",
@@ -120,22 +121,14 @@ impl TelemetryClient {
             .map_err(|_| RouterError::Timeout("Varlink write timed out".into()))??;
 
         let mut buf = Vec::with_capacity(512);
-        let mut byte = [0u8; 1];
 
-        let read_future = async {
-            loop {
-                let n = reader.read(&mut byte).await?;
-                if n == 0 || byte[0] == 0 {
-                    break;
-                }
-                buf.push(byte[0]);
-            }
-            Ok::<(), std::io::Error>(())
-        };
-
-        timeout(RPC_TIMEOUT, read_future)
+        timeout(RPC_TIMEOUT, reader.read_until(0, &mut buf))
             .await
             .map_err(|_| RouterError::Timeout("Varlink read timed out".into()))??;
+
+        if buf.last() == Some(&0) {
+            buf.pop();
+        }
 
         if buf.is_empty() {
             return Err(RouterError::Varlink("Empty Varlink response from inferenced".into()));

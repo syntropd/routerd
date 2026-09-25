@@ -31,7 +31,9 @@ async fn handle_get_status(engine: &Arc<RouterEngine>) -> VarlinkReply {
         "providers_count": status.providers_count,
         "healthy_providers_count": status.healthy_providers_count,
         "psi_level": status.psi_level,
-        "psi_memory_some": status.psi_memory_some
+        "psi_memory_some": status.psi_memory_some,
+        "rss_bytes": status.rss_bytes,
+        "rss_mb": status.rss_mb
     }))
 }
 

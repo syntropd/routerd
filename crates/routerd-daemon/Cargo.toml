@@ -8,6 +8,10 @@ authors.workspace = true
 repository = "https://github.com/syntropd/routerd"
 description = "Intelligent model router, difficulty-tier evaluation, and wire protocol gateway daemon for syntropd"
 
+[lib]
+name = "routerd_daemon"
+path = "src/lib.rs"
+
 [[bin]]
 name = "routerd"
 path = "src/main.rs"

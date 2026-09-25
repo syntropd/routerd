@@ -1,10 +1,11 @@
 use anyhow::Result;
-use rustix::fd::{FromRawFd, IntoRawFd, OwnedFd};
+use rustix::fd::BorrowedFd;
 use rustix::fs::{fcntl_getfd, fcntl_setfd, FdFlags};
 use rustix::net::{getsockname, SocketAddrAny};
 use std::env;
 use std::net::TcpListener as StdTcpListener;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::io::FromRawFd;
 use std::os::unix::net::UnixListener as StdUnixListener;
 use std::path::Path;
 use tokio::net::{TcpListener, UnixListener};
@@ -65,13 +66,13 @@ pub fn check_and_adopt_sockets() -> Result<ActivatedSockets> {
 
     for i in 0..fds_count {
         let fd_raw = SD_LISTEN_FDS_START + i;
-        let owned_fd = unsafe { OwnedFd::from_raw_fd(fd_raw) };
+        let borrowed_fd = unsafe { BorrowedFd::borrow_raw(fd_raw) };
 
-        if let Ok(flags) = fcntl_getfd(&owned_fd) {
-            let _ = fcntl_setfd(&owned_fd, flags | FdFlags::CLOEXEC);
+        if let Ok(flags) = fcntl_getfd(borrowed_fd) {
+            let _ = fcntl_setfd(borrowed_fd, flags | FdFlags::CLOEXEC);
         }
 
-        let sock_addr = match getsockname(&owned_fd) {
+        let sock_addr = match getsockname(borrowed_fd) {
             Ok(addr) => addr,
             Err(e) => {
                 warn!("Failed getsockname on fd {}: {}", fd_raw, e);
@@ -81,8 +82,7 @@ pub fn check_and_adopt_sockets() -> Result<ActivatedSockets> {
 
         match sock_addr {
             SocketAddrAny::Unix(addr) => {
-                let raw = owned_fd.into_raw_fd();
-                let std_unix = unsafe { StdUnixListener::from_raw_fd(raw) };
+                let std_unix = unsafe { StdUnixListener::from_raw_fd(fd_raw) };
                 std_unix.set_nonblocking(true)?;
                 let tokio_unix = UnixListener::from_std(std_unix)?;
                 let path = addr
@@ -114,16 +114,14 @@ pub fn check_and_adopt_sockets() -> Result<ActivatedSockets> {
                 }
             }
             SocketAddrAny::V4(addr) => {
-                let raw = owned_fd.into_raw_fd();
-                let std_tcp = unsafe { StdTcpListener::from_raw_fd(raw) };
+                let std_tcp = unsafe { StdTcpListener::from_raw_fd(fd_raw) };
                 std_tcp.set_nonblocking(true)?;
                 let tokio_tcp = TcpListener::from_std(std_tcp)?;
                 info!("Adopted IPv4 Gateway socket on fd {} ({})", fd_raw, addr);
                 sockets.tcp_gateways.push(tokio_tcp);
             }
             SocketAddrAny::V6(addr) => {
-                let raw = owned_fd.into_raw_fd();
-                let std_tcp = unsafe { StdTcpListener::from_raw_fd(raw) };
+                let std_tcp = unsafe { StdTcpListener::from_raw_fd(fd_raw) };
                 std_tcp.set_nonblocking(true)?;
                 let tokio_tcp = TcpListener::from_std(std_tcp)?;
                 info!("Adopted IPv6 Gateway socket on fd {} ({})", fd_raw, addr);
