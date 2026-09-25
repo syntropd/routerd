@@ -60,6 +60,8 @@ pub struct ThresholdsConfig {
     pub max_retries: usize,
     #[serde(default = "default_rss_limit_mb")]
     pub rss_limit_mb: usize,
+    #[serde(default = "default_min_tokens_per_second")]
+    pub min_tokens_per_second: f64,
 }
 
 fn default_max_latency() -> u64 {
@@ -74,6 +76,9 @@ fn default_max_retries() -> usize {
 fn default_rss_limit_mb() -> usize {
     15
 }
+fn default_min_tokens_per_second() -> f64 {
+    10.0
+}
 
 impl Default for ThresholdsConfig {
     fn default() -> Self {
@@ -82,6 +87,7 @@ impl Default for ThresholdsConfig {
             psi_memory_threshold: default_psi_memory_threshold(),
             max_retries: default_max_retries(),
             rss_limit_mb: default_rss_limit_mb(),
+            min_tokens_per_second: default_min_tokens_per_second(),
         }
     }
 }
@@ -271,9 +277,20 @@ mod tests {
 
         let cfg = RouterConfig::load_from_str(toml_str).unwrap();
         assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:32768");
+        assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
         assert_eq!(cfg.providers.len(), 1);
         assert_eq!(cfg.providers[0].id, "test-provider");
         assert_eq!(cfg.providers[0].models[0].name, "test-model");
         assert_eq!(cfg.providers[0].models[0].max_context_tokens, 64000);
+    }
+
+    #[test]
+    fn test_thresholds_custom_min_tokens_per_second() {
+        let toml_str = r#"
+        [thresholds]
+        min_tokens_per_second = 25.5
+        "#;
+        let cfg = RouterConfig::load_from_str(toml_str).unwrap();
+        assert_eq!(cfg.thresholds.min_tokens_per_second, 25.5);
     }
 }

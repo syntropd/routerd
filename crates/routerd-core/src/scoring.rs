@@ -1,4 +1,4 @@
-use crate::config::TierConfig;
+use crate::config::{ThresholdsConfig, TierConfig};
 use crate::error::{Result, RouterError};
 use crate::models::{ChatCompletionRequest, ProviderModelConfig};
 use crate::telemetry::PressureLevel;
@@ -90,6 +90,7 @@ impl ScoringEngine {
         req: &RequestProfile,
         cand: &CandidateProvider,
         tier_cfg: &TierConfig,
+        thresholds: &ThresholdsConfig,
     ) -> ScoredCandidate {
         if !cand.provider_enabled {
             return ScoredCandidate {
@@ -120,6 +121,26 @@ impl ScoringEngine {
                 reason: format!(
                     "Context limit exceeded (tokens: {}, limit: {})",
                     total_tokens, cand.model.max_context_tokens
+                ),
+            };
+        }
+
+        // 2. Minimum token/sec threshold disqualification
+        if thresholds.min_tokens_per_second > 0.0
+            && cand.model.tokens_per_second < thresholds.min_tokens_per_second
+        {
+            return ScoredCandidate {
+                provider_id: cand.provider_id.clone(),
+                model_name: cand.model.name.clone(),
+                total_score: f64::NEG_INFINITY,
+                speed_score: 0.0,
+                cost_score: 0.0,
+                capability_score: 0.0,
+                estimated_cost: 0.0,
+                disqualified: true,
+                reason: format!(
+                    "Model speed {:.1} tok/s is below minimum threshold {:.1} tok/s",
+                    cand.model.tokens_per_second, thresholds.min_tokens_per_second
                 ),
             };
         }
@@ -239,15 +260,25 @@ impl ScoringEngine {
         }
     }
 
+    /// Convenience helper using default thresholds.
+    pub fn score_candidate_default(
+        req: &RequestProfile,
+        cand: &CandidateProvider,
+        tier_cfg: &TierConfig,
+    ) -> ScoredCandidate {
+        Self::score_candidate(req, cand, tier_cfg, &ThresholdsConfig::default())
+    }
+
     /// Rank candidates for a request and return sorted candidates descending by score.
     pub fn rank_candidates(
         req: &RequestProfile,
         candidates: &[CandidateProvider],
         tier_cfg: &TierConfig,
+        thresholds: &ThresholdsConfig,
     ) -> Vec<ScoredCandidate> {
         let mut scored: Vec<ScoredCandidate> = candidates
             .iter()
-            .map(|c| Self::score_candidate(req, c, tier_cfg))
+            .map(|c| Self::score_candidate(req, c, tier_cfg, thresholds))
             .filter(|s| !s.disqualified)
             .collect();
 
@@ -260,8 +291,9 @@ impl ScoringEngine {
         req: &RequestProfile,
         candidates: &[CandidateProvider],
         tier_cfg: &TierConfig,
+        thresholds: &ThresholdsConfig,
     ) -> Result<ScoredCandidate> {
-        let ranked = Self::rank_candidates(req, candidates, tier_cfg);
+        let ranked = Self::rank_candidates(req, candidates, tier_cfg, thresholds);
         ranked.into_iter().next().ok_or_else(|| {
             RouterError::NoHealthyProvider(format!(
                 "No candidate satisfies request (model='{}', tier='{}', tokens={})",
@@ -312,7 +344,8 @@ mod tests {
             require_stream: false,
         };
         let tier_cfg = TierConfig::default();
-        let scored = ScoringEngine::score_candidate(&req, &cand, &tier_cfg);
+        let thresholds = ThresholdsConfig::default();
+        let scored = ScoringEngine::score_candidate(&req, &cand, &tier_cfg, &thresholds);
         assert!(scored.disqualified);
         assert!(scored.reason.contains("Context limit exceeded"));
     }
@@ -336,9 +369,10 @@ mod tests {
             capability_weight: 0.10,
             default_model: None,
         };
+        let thresholds = ThresholdsConfig::default();
 
-        let scored_fast = ScoringEngine::score_candidate(&req, &fast_cand, &tier_cfg);
-        let scored_slow = ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg);
+        let scored_fast = ScoringEngine::score_candidate(&req, &fast_cand, &tier_cfg, &thresholds);
+        let scored_slow = ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg, &thresholds);
 
         assert!(scored_fast.total_score > scored_slow.total_score);
     }
@@ -362,10 +396,66 @@ mod tests {
             capability_weight: 0.80,
             default_model: None,
         };
+        let thresholds = ThresholdsConfig::default();
 
-        let scored_fast = ScoringEngine::score_candidate(&req, &fast_cand, &tier_cfg);
-        let scored_hard = ScoringEngine::score_candidate(&req, &hard_cand, &tier_cfg);
+        let scored_fast = ScoringEngine::score_candidate(&req, &fast_cand, &tier_cfg, &thresholds);
+        let scored_hard = ScoringEngine::score_candidate(&req, &hard_cand, &tier_cfg, &thresholds);
 
         assert!(scored_hard.total_score > scored_fast.total_score);
+    }
+
+    #[test]
+    fn test_min_tokens_per_second_disqualification() {
+        let mut slow_cand = sample_candidate("slow-node", "fast", 0.000001, 40.0, 32000);
+        slow_cand.model.tokens_per_second = 8.5;
+
+        let mut fast_cand = sample_candidate("fast-node", "fast", 0.000001, 40.0, 32000);
+        fast_cand.model.tokens_per_second = 50.0;
+
+        let req = RequestProfile {
+            requested_model: "router:fast".to_string(),
+            requested_tier: "fast".to_string(),
+            estimated_prompt_tokens: 100,
+            estimated_output_tokens: 100,
+            require_stream: false,
+        };
+        let tier_cfg = TierConfig::default();
+        let thresholds = ThresholdsConfig {
+            min_tokens_per_second: 10.0,
+            ..Default::default()
+        };
+
+        // 1. Slow model (< 10.0 tok/s) is disqualified with expected reason
+        let scored_slow = ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg, &thresholds);
+        assert!(scored_slow.disqualified);
+        assert!(scored_slow.total_score.is_infinite() && scored_slow.total_score < 0.0);
+        assert_eq!(
+            scored_slow.reason,
+            "Model speed 8.5 tok/s is below minimum threshold 10.0 tok/s"
+        );
+
+        // 2. Fast model (>= 10.0 tok/s) is eligible
+        let scored_fast = ScoringEngine::score_candidate(&req, &fast_cand, &tier_cfg, &thresholds);
+        assert!(!scored_fast.disqualified);
+        assert!(scored_fast.total_score > 0.0);
+
+        // 3. rank_candidates excludes disqualified slow model
+        let ranked = ScoringEngine::rank_candidates(
+            &req,
+            &[slow_cand.clone(), fast_cand.clone()],
+            &tier_cfg,
+            &thresholds,
+        );
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].provider_id, "fast-node");
+
+        // 4. When min_tokens_per_second is 0.0 (disabled), slow model is not disqualified
+        let disabled_thresholds = ThresholdsConfig {
+            min_tokens_per_second: 0.0,
+            ..Default::default()
+        };
+        let scored_slow_allowed =
+            ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg, &disabled_thresholds);
+        assert!(!scored_slow_allowed.disqualified);
     }
 }

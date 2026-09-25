@@ -1,6 +1,6 @@
 use routerd_core::{
     CandidateProvider, PressureLevel, ProviderModelConfig, RequestProfile, ScoringEngine,
-    TierConfig,
+    ThresholdsConfig, TierConfig,
 };
 
 fn make_candidate(
@@ -45,7 +45,8 @@ fn test_context_limit_enforcement() {
         require_stream: false,
     };
     let tier_cfg = TierConfig::default();
-    let scored = ScoringEngine::score_candidate(&req, &cand, &tier_cfg);
+    let thresholds = ThresholdsConfig::default();
+    let scored = ScoringEngine::score_candidate(&req, &cand, &tier_cfg, &thresholds);
     assert!(scored.disqualified);
     assert!(scored.total_score.is_infinite() && scored.total_score < 0.0);
 }
@@ -70,9 +71,10 @@ fn test_fast_tier_scoring() {
         capability_weight: 0.10,
         default_model: None,
     };
+    let thresholds = ThresholdsConfig::default();
 
-    let s1 = ScoringEngine::score_candidate(&req, &fast_lpu, &tier_cfg);
-    let s2 = ScoringEngine::score_candidate(&req, &slow_heavy, &tier_cfg);
+    let s1 = ScoringEngine::score_candidate(&req, &fast_lpu, &tier_cfg, &thresholds);
+    let s2 = ScoringEngine::score_candidate(&req, &slow_heavy, &tier_cfg, &thresholds);
 
     assert!(!s1.disqualified);
     assert!(!s2.disqualified);
@@ -102,9 +104,10 @@ fn test_hard_tier_scoring() {
         capability_weight: 0.80,
         default_model: None,
     };
+    let thresholds = ThresholdsConfig::default();
 
-    let s1 = ScoringEngine::score_candidate(&req, &fast_lpu, &tier_cfg);
-    let s2 = ScoringEngine::score_candidate(&req, &hard_model, &tier_cfg);
+    let s1 = ScoringEngine::score_candidate(&req, &fast_lpu, &tier_cfg, &thresholds);
+    let s2 = ScoringEngine::score_candidate(&req, &hard_model, &tier_cfg, &thresholds);
 
     assert!(
         s2.total_score > s1.total_score,
@@ -127,18 +130,60 @@ fn test_psi_telemetry_penalty_on_local() {
         require_stream: false,
     };
     let tier_cfg = TierConfig::default();
+    let thresholds = ThresholdsConfig::default();
 
     // 1. Under normal PSI, local wins
-    let s_local_norm = ScoringEngine::score_candidate(&req, &local_cand, &tier_cfg);
-    let s_remote = ScoringEngine::score_candidate(&req, &remote_cand, &tier_cfg);
+    let s_local_norm = ScoringEngine::score_candidate(&req, &local_cand, &tier_cfg, &thresholds);
+    let s_remote = ScoringEngine::score_candidate(&req, &remote_cand, &tier_cfg, &thresholds);
     assert!(s_local_norm.total_score > s_remote.total_score);
 
     // 2. Under critical PSI, local is heavily penalized
     local_cand.psi_level = PressureLevel::Critical;
     local_cand.psi_memory_some = 45.0;
-    let s_local_crit = ScoringEngine::score_candidate(&req, &local_cand, &tier_cfg);
+    let s_local_crit = ScoringEngine::score_candidate(&req, &local_cand, &tier_cfg, &thresholds);
     assert!(
         s_remote.total_score > s_local_crit.total_score,
         "Critical PSI should cause remote node to win over local"
     );
+}
+
+#[test]
+fn test_min_tokens_per_second_threshold_disqualification() {
+    let slow_cand = make_candidate("crawling-model", "fast", 0.0, 50.0, 4.5, 8192);
+    let ok_cand = make_candidate("normal-model", "fast", 0.0, 50.0, 25.0, 8192);
+
+    let req = RequestProfile {
+        requested_model: "router:fast".to_string(),
+        requested_tier: "fast".to_string(),
+        estimated_prompt_tokens: 200,
+        estimated_output_tokens: 200,
+        require_stream: false,
+    };
+    let tier_cfg = TierConfig::default();
+    let thresholds = ThresholdsConfig {
+        min_tokens_per_second: 10.0,
+        ..Default::default()
+    };
+
+    let s_slow = ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg, &thresholds);
+    assert!(s_slow.disqualified);
+    assert!(s_slow.total_score.is_infinite() && s_slow.total_score < 0.0);
+    assert_eq!(
+        s_slow.reason,
+        "Model speed 4.5 tok/s is below minimum threshold 10.0 tok/s"
+    );
+
+    let s_ok = ScoringEngine::score_candidate(&req, &ok_cand, &tier_cfg, &thresholds);
+    assert!(!s_ok.disqualified);
+    assert!(s_ok.total_score > 0.0);
+
+    // rank_candidates verifies that crawling model is completely omitted
+    let ranked = ScoringEngine::rank_candidates(
+        &req,
+        &[slow_cand.clone(), ok_cand.clone()],
+        &tier_cfg,
+        &thresholds,
+    );
+    assert_eq!(ranked.len(), 1);
+    assert_eq!(ranked[0].provider_id, "normal-model");
 }

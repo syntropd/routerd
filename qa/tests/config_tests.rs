@@ -11,6 +11,7 @@ fn test_template_config_parsing() {
 
     assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:32768");
     assert_eq!(cfg.daemon.varlink_socket, "/run/syntrop/io.syntrop.Router1");
+    assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
     assert_eq!(cfg.providers.len(), 8);
 
     let provider_ids: Vec<&str> = cfg.providers.iter().map(|p| p.id.as_str()).collect();

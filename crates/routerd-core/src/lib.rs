@@ -10,7 +10,7 @@ pub mod router;
 pub mod scoring;
 pub mod telemetry;
 
-pub use config::{DaemonConfig, ProviderConfig, RouterConfig, TierConfig};
+pub use config::{DaemonConfig, ProviderConfig, RouterConfig, ThresholdsConfig, TierConfig};
 pub use error::{Result, RouterError};
 pub use models::{
     ChatChoice, ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,

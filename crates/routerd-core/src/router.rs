@@ -1,5 +1,5 @@
 use crate::adapters::{create_adapter, ByteStream, ProviderAdapter};
-use crate::config::{ProviderConfig, RouterConfig, TierConfig};
+use crate::config::{ProviderConfig, RouterConfig, ThresholdsConfig, TierConfig};
 use crate::error::{Result, RouterError};
 use crate::models::{
     ChatCompletionRequest, ChatCompletionResponse, ModelItem, ModelListResponse,
@@ -131,8 +131,8 @@ impl RouterEngine {
         self.active_requests.fetch_add(1, Ordering::SeqCst);
         let _guard = ScopeActiveGuard(&self.active_requests);
 
-        let (req_profile, tier_cfg, candidates) = self.prepare_routing(request).await?;
-        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg);
+        let (req_profile, tier_cfg, thresholds, candidates) = self.prepare_routing(request).await?;
+        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
 
         if ranked.is_empty() {
             let total_tokens = req_profile.total_tokens();
@@ -231,8 +231,8 @@ impl RouterEngine {
         self.active_requests.fetch_add(1, Ordering::SeqCst);
         let _guard = ScopeActiveGuard(&self.active_requests);
 
-        let (req_profile, tier_cfg, candidates) = self.prepare_routing(request).await?;
-        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg);
+        let (req_profile, tier_cfg, thresholds, candidates) = self.prepare_routing(request).await?;
+        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
 
         if ranked.is_empty() {
             let total_tokens = req_profile.total_tokens();
@@ -322,10 +322,11 @@ impl RouterEngine {
     async fn prepare_routing(
         &self,
         request: &ChatCompletionRequest,
-    ) -> Result<(RequestProfile, TierConfig, Vec<CandidateProvider>)> {
+    ) -> Result<(RequestProfile, TierConfig, ThresholdsConfig, Vec<CandidateProvider>)> {
         let cfg = self.config.read().await;
         let req_profile = RequestProfile::from_request(request, "fast");
         let tier_cfg = cfg.get_tier_config(&req_profile.requested_tier);
+        let thresholds = cfg.thresholds.clone();
 
         let psi = self.telemetry.get_pressure().await;
         let mut candidates = Vec::new();
@@ -351,7 +352,7 @@ impl RouterEngine {
             }
         }
 
-        Ok((req_profile, tier_cfg, candidates))
+        Ok((req_profile, tier_cfg, thresholds, candidates))
     }
 
     /// Simulate route evaluation for routerctl / Varlink RouteRequest.
@@ -374,8 +375,8 @@ impl RouterEngine {
             extra: HashMap::new(),
         };
 
-        let (req_profile, tier_cfg, candidates) = self.prepare_routing(&dummy_request).await?;
-        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg);
+        let (req_profile, tier_cfg, thresholds, candidates) = self.prepare_routing(&dummy_request).await?;
+        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
         Ok(ranked)
     }
 
