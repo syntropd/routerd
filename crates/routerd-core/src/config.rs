@@ -156,7 +156,9 @@ fn default_provider_weight() -> f64 {
     1.0
 }
 fn default_enabled() -> bool {
-    true
+    // Providers stay off unless explicitly enabled (setup only enables
+    // entries it verifies live).
+    false
 }
 fn default_timeout_ms() -> u64 {
     30000

@@ -108,10 +108,6 @@ pub struct SetupArgs {
     #[arg(long, default_value = "/etc/syntrop/routerd.toml")]
     pub config: PathBuf,
 
-    /// Path to credentials environment file
-    #[arg(long, default_value = "/etc/syntrop/credentials.env")]
-    pub credentials_path: PathBuf,
-
     /// Directory for downloaded/staged models
     #[arg(long, default_value = "/var/lib/models")]
     pub models_dir: PathBuf,

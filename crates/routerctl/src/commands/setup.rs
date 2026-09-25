@@ -1,55 +1,28 @@
 use crate::cli::SetupArgs;
 use anyhow::{anyhow, Result};
 use colored::Colorize;
+use futures::future::join_all;
+use routerd_core::credentials::resolve_credential;
 use std::fs;
 use std::io::{self, Write};
 use std::path::Path;
 use std::time::Duration;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value};
 
-#[derive(Debug, Clone)]
-pub struct GemmaModelInfo {
-    pub name: String,
-    pub description: &'static str,
-    pub size_label: &'static str,
-    pub tier: &'static str,
-    pub max_context: usize,
-    pub avg_latency_ms: f64,
-    pub tokens_per_second: f64,
-}
+/// Timeout for a single provider probe during setup.
+const PROBE_TIMEOUT_SECS: u64 = 5;
+/// Files smaller than this are stubs, not models.
+const MIN_REAL_MODEL_BYTES: u64 = 1_000_000;
+/// Well-known local Ollama endpoint (OpenAI-compatible path).
+const LOCAL_OLLAMA_URL: &str = "http://127.0.0.1:11434/v1";
+/// Socket proving the local inference broker is alive.
+const INFERENCED_SOCKET: &str = "/run/syntrop/io.syntrop.Inference1";
+const MINIMAX_BASE_URL: &str = "https://api.minimaxi.chat/v1";
+const MISTRAL_BASE_URL: &str = "https://api.mistral.ai/v1";
 
-
-pub fn get_gemma_catalog() -> Vec<GemmaModelInfo> {
-    vec![
-        GemmaModelInfo {
-            name: "gemma-4-e2b-it".to_string(),
-            description: "Edge 2B, ~1.5 GB VRAM",
-            size_label: "1.5 GB",
-            tier: "fast",
-            max_context: 8192,
-            avg_latency_ms: 35.0,
-            tokens_per_second: 150.0,
-        },
-        GemmaModelInfo {
-            name: "gemma-4-e4b-it".to_string(),
-            description: "Edge 4B, ~2.8 GB VRAM",
-            size_label: "2.8 GB",
-            tier: "fast",
-            max_context: 8192,
-            avg_latency_ms: 45.0,
-            tokens_per_second: 110.0,
-        },
-        GemmaModelInfo {
-            name: "gemma-4-26b-a4b-it".to_string(),
-            description: "MoE 26B/4B active, ~14.0 GB VRAM",
-            size_label: "14.0 GB",
-            tier: "hard",
-            max_context: 16384,
-            avg_latency_ms: 120.0,
-            tokens_per_second: 45.0,
-        },
-    ]
-}
+// Setup registers only servers and model files it verifies live.
+// There is deliberately no model-download step: bring Ollama or GGUF files,
+// re-run setup, and they get picked up.
 
 fn prompt_line(prompt: &str) -> String {
     print!("{}", prompt);
@@ -65,170 +38,130 @@ fn prompt_line(prompt: &str) -> String {
 pub async fn run_setup(args: &SetupArgs) -> Result<()> {
     println!();
     println!("{}", "============================================================".cyan().bold());
-    println!("{}", " syntrop-routerd — Interactive Provider & Model Setup".cyan().bold());
+    println!("{}", " syntrop-routerd — Provider Setup (every entry is pinged live)".cyan().bold());
     println!("{}", "============================================================".cyan().bold());
     println!("Target config:      {}", args.config.display().to_string().bold());
-    println!("Credentials file:   {}", args.credentials_path.display().to_string().bold());
     println!("Model storage root: {}", args.models_dir.display().to_string().bold());
     println!();
 
     // 0. Load or initialize TOML document
     let mut doc = load_or_init_config(&args.config)?;
     ensure_thresholds_config(&mut doc);
+    let mut report: Vec<(String, String)> = Vec::new();
 
-    // 1. MiniMax Setup
-    println!("{}", "[1/5] MiniMax AI Configuration".bold().green());
-    println!("MiniMax delivers high-throughput reasoning and long-context dialogue.");
-    let minimax_key = prompt_line("Enter MiniMax API Key (leave empty to skip): ");
+    // 1. Audit whatever is already configured: ping it, switch off the dead.
+    println!("{}", "[1/5] Already configured".bold().green());
+    audit_existing_providers(&mut doc, &mut report).await;
+    println!();
+
+    // 2. This machine: local Ollama server and real model files.
+    println!("{}", "[2/5] This machine (local)".bold().green());
+    autodetect_local(&mut doc, &args.models_dir, &mut report).await;
+    println!();
+
+    // 3. MiniMax with live verification.
+    println!("{}", "[3/5] MiniMax AI".bold().green());
+    let minimax_key = prompt_line("MiniMax API key (leave empty to skip): ");
     if minimax_key.is_empty() {
-        configure_minimax(&mut doc, None);
-        println!("  {} MiniMax provider marked disabled.", "ℹ".blue());
+        configure_minimax(&mut doc, None, None);
+        report.push(("minimax".to_string(), "OFF · skipped".to_string()));
+        println!("  {} MiniMax skipped and switched off.", "ℹ".blue());
     } else {
-        print!("  Probing MiniMax API connectivity... ");
+        print!("  Pinging MiniMax model list... ");
         let _ = io::stdout().flush();
-        match probe_minimax(&minimax_key).await {
-            Ok(()) => {
-                println!("{}", "PASS (connection verified)".green().bold());
+        match fetch_model_ids(MINIMAX_BASE_URL, Some(minimax_key.as_str())).await {
+            Ok(ids) => {
+                println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
+                configure_minimax(&mut doc, Some(minimax_key), Some(ids.clone()));
+                report.push((
+                    "minimax".to_string(),
+                    format!("LIVE · {} model(s)", ids.len()),
+                ));
             }
             Err(e) => {
-                println!("{} ({})", "WARN".yellow().bold(), e);
+                println!("{} ({})", "DEAD".red().bold(), e);
+                configure_minimax(&mut doc, None, None);
+                report.push(("minimax".to_string(), format!("OFF · {}", e)));
             }
         }
-        configure_minimax(&mut doc, Some(minimax_key));
-        println!("  {} MiniMax provider configured and enabled.", "✔".green());
     }
     println!();
 
-    // 2. Mistral AI Setup
-    println!("{}", "[2/5] Mistral AI Configuration".bold().green());
-    println!("Mistral AI provides state-of-the-art European frontier reasoning models.");
-    let mistral_key = prompt_line("Enter Mistral API Key (leave empty to skip): ");
+    // 4. Mistral with live verification.
+    println!("{}", "[4/5] Mistral AI".bold().green());
+    let mistral_key = prompt_line("Mistral API key (leave empty to skip): ");
     if mistral_key.is_empty() {
-        configure_mistral(&mut doc, None);
-        println!("  {} Mistral AI provider marked disabled.", "ℹ".blue());
+        configure_mistral(&mut doc, None, None);
+        report.push(("mistral".to_string(), "OFF · skipped".to_string()));
+        println!("  {} Mistral skipped and switched off.", "ℹ".blue());
     } else {
-        print!("  Probing Mistral AI endpoint (https://api.mistral.ai/v1/models)... ");
+        print!("  Pinging Mistral model list... ");
         let _ = io::stdout().flush();
-        match probe_mistral(&mistral_key).await {
-            Ok(()) => {
-                println!("{}", "PASS (HTTP 200 OK)".green().bold());
+        match fetch_model_ids(MISTRAL_BASE_URL, Some(mistral_key.as_str())).await {
+            Ok(ids) => {
+                println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
+                configure_mistral(&mut doc, Some(mistral_key), Some(ids.clone()));
+                report.push((
+                    "mistral".to_string(),
+                    format!("LIVE · {} model(s)", ids.len()),
+                ));
             }
             Err(e) => {
-                println!("{} ({})", "WARN".yellow().bold(), e);
+                println!("{} ({})", "DEAD".red().bold(), e);
+                configure_mistral(&mut doc, None, None);
+                report.push(("mistral".to_string(), format!("OFF · {}", e)));
             }
         }
-        configure_mistral(&mut doc, Some(mistral_key));
-        println!("  {} Mistral AI provider configured and enabled.", "✔".green());
     }
     println!();
 
-    // 3. Custom OpenAI-Compatible Provider Setup
-    println!("{}", "[3/5] Custom OpenAI-Compatible Provider".bold().green());
-    let add_custom = prompt_line("Add a custom OpenAI-compatible provider (e.g. OpenAI, OpenRouter, vLLM, DeepSeek)? [y/N]: ");
+    // 5. Custom OpenAI-style provider with live verification.
+    println!("{}", "[5/5] Custom provider".bold().green());
+    let add_custom = prompt_line("Add a custom provider (local vLLM, OpenRouter...)? [y/N]: ");
     if add_custom.eq_ignore_ascii_case("y") || add_custom.eq_ignore_ascii_case("yes") {
-        let p_id = prompt_line("  Provider ID (e.g. openrouter, deepseek, local-vllm): ");
+        let p_id = prompt_line("  Provider ID (e.g. openrouter, local-vllm): ");
         let p_id = if p_id.is_empty() { "custom-provider".to_string() } else { p_id };
-        let p_name = prompt_line("  Display Name (leave empty for same as ID): ");
+        let p_name = prompt_line("  Display name (leave empty for same as ID): ");
         let p_name = if p_name.is_empty() { p_id.clone() } else { p_name };
-        let base_url = prompt_line("  Base URL (e.g. https://api.deepseek.com/v1): ");
+        let base_url = prompt_line("  Base URL (e.g. https://api.openai.com/v1): ");
         let base_url = if base_url.is_empty() {
             "https://api.openai.com/v1".to_string()
         } else {
             base_url.trim_end_matches('/').to_string()
         };
-        let p_key = prompt_line("  API Key (leave empty if none / local unauthenticated): ");
-        let p_key_opt = if p_key.is_empty() { None } else { Some(p_key.as_str()) };
-        let models_str = prompt_line("  Model Name(s) (comma-separated, e.g. deepseek-chat, deepseek-coder): ");
-        let models: Vec<String> = if models_str.is_empty() {
-            vec![format!("{}-model", p_id)]
-        } else {
-            models_str
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        };
-
-        print!("  Probing custom provider ({}/models)... ", base_url);
+        let p_key = prompt_line("  API key (leave empty if none / local): ");
+        let key_opt = if p_key.is_empty() { None } else { Some(p_key.as_str()) };
+        print!("  Pinging provider model list... ");
         let _ = io::stdout().flush();
-        match probe_custom(&base_url, p_key_opt).await {
-            Ok(()) => {
-                println!("{}", "PASS (reachable)".green().bold());
+        match fetch_model_ids(&base_url, key_opt).await {
+            Ok(ids) => {
+                println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
+                add_custom_provider(&mut doc, &p_id, &p_name, "openai", &base_url, key_opt, &ids, true);
+                report.push((p_id, format!("LIVE · {} model(s)", ids.len())));
             }
             Err(e) => {
-                println!("{} ({})", "WARN".yellow().bold(), e);
+                println!("{} ({})", "DEAD".red().bold(), e);
+                let save = prompt_line("  Save it anyway (stays OFF until it answers)? [y/N]: ");
+                if save.eq_ignore_ascii_case("y") || save.eq_ignore_ascii_case("yes") {
+                    let models_str = prompt_line("  Model names, comma-separated: ");
+                    let models: Vec<String> = models_str
+                        .split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect();
+                    add_custom_provider(&mut doc, &p_id, &p_name, "openai", &base_url, key_opt, &models, false);
+                    report.push((p_id, format!("OFF · {} (saved anyway)", e)));
+                } else {
+                    report.push((p_id, format!("OFF · {} (not saved)", e)));
+                }
             }
         }
-
-        add_custom_provider(&mut doc, &p_id, &p_name, &base_url, p_key_opt, &models);
-        println!("  {} Custom provider '{}' registered with {} models.", "✔".green(), p_id.bold(), models.len());
     } else {
-        println!("  {} Skipped custom provider configuration.", "ℹ".blue());
+        println!("  {} Skipped custom provider.", "ℹ".blue());
     }
     println!();
 
-    // 4. Hugging Face Access Token Setup
-    println!("{}", "[4/5] Hugging Face Credentials".bold().green());
-    println!("A Hugging Face access token allows downloading gated and open-weights models.");
-    let hf_token = prompt_line("Enter Hugging Face access token (hf_..., leave empty to skip): ");
-    if hf_token.is_empty() {
-        println!("  {} Skipped Hugging Face token configuration.", "ℹ".blue());
-    } else {
-        print!("  Validating Hugging Face token via https://huggingface.co/api/whoami-v2... ");
-        let _ = io::stdout().flush();
-        match validate_huggingface_token(&hf_token).await {
-            Ok(user) => {
-                println!("{} (authenticated as '{}')", "PASS".green().bold(), user.bold());
-            }
-            Err(e) => {
-                println!("{} ({})", "WARN".yellow().bold(), e);
-            }
-        }
-        update_credentials_env(&args.credentials_path, "HF_TOKEN", &hf_token)?;
-        println!(
-            "  {} Stored HF_TOKEN in {} with strict 0600 root:syntrop permissions.",
-            "✔".green(),
-            args.credentials_path.display().to_string().bold()
-        );
-    }
-    println!();
-
-    // 5. Gemma 4 Open-Weights Models Download & Staging
-    println!("{}", "[5/5] Gemma 4 Open-Weights Models".bold().green());
-    println!("Google Gemma 4 models offer state-of-the-art open weights (Apache 2.0 license)");
-    println!("optimized for local Linux hardware acceleration (CUDA, ROCm, Vulkan, CPU).");
-    println!();
-    println!("Available Models:");
-    let catalog = get_gemma_catalog();
-    for (i, m) in catalog.iter().enumerate() {
-        println!("  [{}] {:<20} ({})", i + 1, m.name.bold(), m.description);
-    }
-    println!("  [{}] All of the above", catalog.len() + 1);
-    println!("  [s] Skip local model download");
-    println!();
-
-    let sel = prompt_line("Select model(s) to download or stage (e.g. 1, 2, 'all', or Enter to skip): ");
-    let selected_indices = parse_selection(&sel, catalog.len());
-    if selected_indices.is_empty() {
-        println!("  {} Skipped Gemma 4 model staging.", "ℹ".blue());
-    } else {
-        let mut staged_models = Vec::new();
-        for idx in selected_indices {
-            let model = &catalog[idx - 1];
-            println!("  ==> Staging Gemma 4 model '{}' ({})...", model.name.bold(), model.size_label);
-            stage_gemma_model(&args.models_dir, model).await?;
-            staged_models.push(model.clone());
-        }
-        register_gemma_models(&mut doc, &staged_models);
-        println!(
-            "  {} Staged and registered {} Gemma 4 model(s) into local varlink inference provider.",
-            "✔".green(),
-            staged_models.len()
-        );
-    }
-    println!();
-
-    // 6. Write Updated Configuration
+    // 6. Write updated configuration
     save_config(&args.config, &doc)?;
     println!(
         "{} Saved active configuration to {}",
@@ -236,20 +169,12 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
         args.config.display().to_string().bold()
     );
 
-    // 7. Reload routerd Service
+    // 7. Reload routerd service
     if !args.no_reload {
         reload_service();
     }
 
-    println!();
-    println!("{}", "============================================================".cyan().bold());
-    println!("{}", " Setup Completed Successfully!".green().bold());
-    println!("{}", "============================================================".cyan().bold());
-    println!("Inspect active providers:  routerctl providers list");
-    println!("Test provider connection:  routerctl providers test");
-    println!("List all available models: routerctl models");
-    println!();
-
+    print_summary(&report);
     Ok(())
 }
 
@@ -321,7 +246,11 @@ pub fn ensure_thresholds_config(doc: &mut DocumentMut) {
     }
 }
 
-pub fn configure_minimax(doc: &mut DocumentMut, api_key: Option<String>) {
+pub fn configure_minimax(
+    doc: &mut DocumentMut,
+    api_key: Option<String>,
+    models: Option<Vec<String>>,
+) {
     let providers = doc.entry("providers").or_insert(Item::ArrayOfTables(ArrayOfTables::new()));
     let arr = match providers.as_array_of_tables_mut() {
         Some(a) => a,
@@ -338,7 +267,11 @@ pub fn configure_minimax(doc: &mut DocumentMut, api_key: Option<String>) {
             found = true;
             match &api_key {
                 Some(key) => {
+                    table.insert("base_url", Item::Value(Value::from(MINIMAX_BASE_URL)));
                     table.insert("api_key", Item::Value(Value::from(key.as_str())));
+                    if let Some(ids) = &models {
+                        set_models_array(table, ids);
+                    }
                     table.insert("enabled", Item::Value(Value::from(true)));
                 }
                 None => {
@@ -350,33 +283,28 @@ pub fn configure_minimax(doc: &mut DocumentMut, api_key: Option<String>) {
     }
 
     if !found {
-        let mut table = Table::new();
-        table.insert("id", Item::Value(Value::from("minimax")));
-        table.insert("name", Item::Value(Value::from("MiniMax AI Cloud")));
-        table.insert("kind", Item::Value(Value::from("minimax")));
-        table.insert("base_url", Item::Value(Value::from("https://api.minimaxi.chat/v1")));
-        match &api_key {
-            Some(key) => {
-                table.insert("api_key", Item::Value(Value::from(key.as_str())));
-                table.insert("enabled", Item::Value(Value::from(true)));
-            }
-            None => {
-                table.insert("enabled", Item::Value(Value::from(false)));
-            }
+        if let Some(key) = &api_key {
+            let mut table = Table::new();
+            table.insert("id", Item::Value(Value::from("minimax")));
+            table.insert("name", Item::Value(Value::from("MiniMax AI Cloud")));
+            table.insert("kind", Item::Value(Value::from("minimax")));
+            table.insert("base_url", Item::Value(Value::from(MINIMAX_BASE_URL)));
+            table.insert("api_key", Item::Value(Value::from(key.as_str())));
+            table.insert("enabled", Item::Value(Value::from(true)));
+            table.insert("tier", Item::Value(Value::from("hard")));
+            table.insert("weight", Item::Value(Value::from(1.0)));
+            table.insert("timeout_ms", Item::Value(Value::from(30000)));
+            set_models_array(&mut table, &models.unwrap_or_default());
+            arr.push(table);
         }
-        table.insert("tier", Item::Value(Value::from("hard")));
-        table.insert("weight", Item::Value(Value::from(1.0)));
-        table.insert("timeout_ms", Item::Value(Value::from(30000)));
-
-        let mut models = Array::new();
-        models.push("abab6.5s-chat");
-        table.insert("models", Item::Value(Value::Array(models)));
-
-        arr.push(table);
     }
 }
 
-pub fn configure_mistral(doc: &mut DocumentMut, api_key: Option<String>) {
+pub fn configure_mistral(
+    doc: &mut DocumentMut,
+    api_key: Option<String>,
+    models: Option<Vec<String>>,
+) {
     let providers = doc.entry("providers").or_insert(Item::ArrayOfTables(ArrayOfTables::new()));
     let arr = match providers.as_array_of_tables_mut() {
         Some(a) => a,
@@ -393,7 +321,11 @@ pub fn configure_mistral(doc: &mut DocumentMut, api_key: Option<String>) {
             found = true;
             match &api_key {
                 Some(key) => {
+                    table.insert("base_url", Item::Value(Value::from(MISTRAL_BASE_URL)));
                     table.insert("api_key", Item::Value(Value::from(key.as_str())));
+                    if let Some(ids) = &models {
+                        set_models_array(table, ids);
+                    }
                     table.insert("enabled", Item::Value(Value::from(true)));
                 }
                 None => {
@@ -405,40 +337,33 @@ pub fn configure_mistral(doc: &mut DocumentMut, api_key: Option<String>) {
     }
 
     if !found {
-        let mut table = Table::new();
-        table.insert("id", Item::Value(Value::from("mistral")));
-        table.insert("name", Item::Value(Value::from("Mistral AI Platform")));
-        table.insert("kind", Item::Value(Value::from("openai")));
-        table.insert("base_url", Item::Value(Value::from("https://api.mistral.ai/v1")));
-        match &api_key {
-            Some(key) => {
-                table.insert("api_key", Item::Value(Value::from(key.as_str())));
-                table.insert("enabled", Item::Value(Value::from(true)));
-            }
-            None => {
-                table.insert("enabled", Item::Value(Value::from(false)));
-            }
+        if let Some(key) = &api_key {
+            let mut table = Table::new();
+            table.insert("id", Item::Value(Value::from("mistral")));
+            table.insert("name", Item::Value(Value::from("Mistral AI Platform")));
+            table.insert("kind", Item::Value(Value::from("openai")));
+            table.insert("base_url", Item::Value(Value::from(MISTRAL_BASE_URL)));
+            table.insert("api_key", Item::Value(Value::from(key.as_str())));
+            table.insert("enabled", Item::Value(Value::from(true)));
+            table.insert("tier", Item::Value(Value::from("hard")));
+            table.insert("weight", Item::Value(Value::from(1.0)));
+            table.insert("timeout_ms", Item::Value(Value::from(25000)));
+            set_models_array(&mut table, &models.unwrap_or_default());
+            arr.push(table);
         }
-        table.insert("tier", Item::Value(Value::from("hard")));
-        table.insert("weight", Item::Value(Value::from(1.0)));
-        table.insert("timeout_ms", Item::Value(Value::from(25000)));
-
-        let mut models = Array::new();
-        models.push("mistral-large-latest");
-        models.push("mistral-small-latest");
-        table.insert("models", Item::Value(Value::Array(models)));
-
-        arr.push(table);
     }
 }
 
+/// Insert or update a provider by id. Re-running setup never duplicates.
 pub fn add_custom_provider(
     doc: &mut DocumentMut,
     id: &str,
     name: &str,
+    kind: &str,
     base_url: &str,
     api_key: Option<&str>,
     models: &[String],
+    enabled: bool,
 ) {
     let providers = doc.entry("providers").or_insert(Item::ArrayOfTables(ArrayOfTables::new()));
     let arr = match providers.as_array_of_tables_mut() {
@@ -446,10 +371,30 @@ pub fn add_custom_provider(
         None => return,
     };
 
+    for table in arr.iter_mut() {
+        let id_str = table
+            .get("id")
+            .and_then(|i| i.as_str())
+            .or_else(|| table.get("name").and_then(|n| n.as_str()));
+        if id_str == Some(id) {
+            table.insert("name", Item::Value(Value::from(if name.is_empty() { id } else { name })));
+            table.insert("kind", Item::Value(Value::from(kind)));
+            table.insert("base_url", Item::Value(Value::from(base_url)));
+            if let Some(key) = api_key {
+                if !key.is_empty() {
+                    table.insert("api_key", Item::Value(Value::from(key)));
+                }
+            }
+            set_models_array(table, models);
+            table.insert("enabled", Item::Value(Value::from(enabled)));
+            return;
+        }
+    }
+
     let mut table = Table::new();
     table.insert("id", Item::Value(Value::from(id)));
     table.insert("name", Item::Value(Value::from(if name.is_empty() { id } else { name })));
-    table.insert("kind", Item::Value(Value::from("openai")));
+    table.insert("kind", Item::Value(Value::from(kind)));
     table.insert("base_url", Item::Value(Value::from(base_url)));
     if let Some(key) = api_key {
         if !key.is_empty() {
@@ -458,20 +403,16 @@ pub fn add_custom_provider(
     }
     table.insert("tier", Item::Value(Value::from("fast")));
     table.insert("weight", Item::Value(Value::from(1.0)));
-    table.insert("enabled", Item::Value(Value::from(true)));
+    table.insert("enabled", Item::Value(Value::from(enabled)));
     table.insert("timeout_ms", Item::Value(Value::from(30000)));
-
-    let mut models_arr = Array::new();
-    for m in models {
-        models_arr.push(m.as_str());
-    }
-    table.insert("models", Item::Value(Value::Array(models_arr)));
-
+    set_models_array(&mut table, models);
     arr.push(table);
 }
 
-pub fn register_gemma_models(doc: &mut DocumentMut, models: &[GemmaModelInfo]) {
-    if models.is_empty() {
+/// Register real on-disk model files under the local varlink provider.
+/// Merges with whatever is already there; never duplicates.
+pub fn upsert_local_models(doc: &mut DocumentMut, names: &[String], enabled: bool) {
+    if names.is_empty() {
         return;
     }
 
@@ -501,352 +442,368 @@ pub fn register_gemma_models(doc: &mut DocumentMut, models: &[GemmaModelInfo]) {
         table.insert("id", Item::Value(Value::from("syntrop-local")));
         table.insert("name", Item::Value(Value::from("Syntrop Local Inferenced Broker")));
         table.insert("kind", Item::Value(Value::from("varlink")));
-        table.insert("base_url", Item::Value(Value::from("/run/syntrop/io.syntrop.Inference1")));
+        table.insert("base_url", Item::Value(Value::from(INFERENCED_SOCKET)));
         table.insert("tier", Item::Value(Value::from("fast")));
         table.insert("weight", Item::Value(Value::from(1.3)));
-        table.insert("enabled", Item::Value(Value::from(true)));
+        table.insert("enabled", Item::Value(Value::from(enabled)));
         table.insert("timeout_ms", Item::Value(Value::from(10000)));
         arr.push(table);
         let last_idx = arr.len() - 1;
         arr.get_mut(last_idx).unwrap()
     };
 
-    local_table.insert("enabled", Item::Value(Value::from(true)));
+    local_table.insert("enabled", Item::Value(Value::from(enabled)));
 
-    // Handle existing models field (either ArrayOfTables or Array of strings)
+    // Merge names into whatever models shape is already there.
     if let Some(models_item) = local_table.get_mut("models") {
         if let Some(arr_tables) = models_item.as_array_of_tables_mut() {
-            for m in models {
+            for name in names {
                 let exists = arr_tables.iter().any(|t| {
-                    t.get("name").and_then(|n| n.as_str()) == Some(&m.name)
+                    t.get("name").and_then(|n| n.as_str()) == Some(name.as_str())
                 });
                 if !exists {
                     let mut m_tab = Table::new();
-                    m_tab.insert("name", Item::Value(Value::from(m.name.as_str())));
-                    m_tab.insert("max_context_tokens", Item::Value(Value::from(m.max_context as i64)));
-                    m_tab.insert("cost_per_input_token", Item::Value(Value::from(0.0)));
-                    m_tab.insert("cost_per_output_token", Item::Value(Value::from(0.0)));
-                    m_tab.insert("avg_latency_ms", Item::Value(Value::from(m.avg_latency_ms)));
-                    m_tab.insert("tokens_per_second", Item::Value(Value::from(m.tokens_per_second)));
-                    m_tab.insert("tier", Item::Value(Value::from(m.tier)));
+                    m_tab.insert("name", Item::Value(Value::from(name.as_str())));
                     arr_tables.push(m_tab);
                 }
             }
         } else if let Some(arr_val) = models_item.as_array_mut() {
-            for m in models {
-                let exists = arr_val.iter().any(|v| v.as_str() == Some(&m.name));
+            for name in names {
+                let exists = arr_val.iter().any(|v| v.as_str() == Some(name.as_str()));
                 if !exists {
-                    arr_val.push(m.name.as_str());
+                    arr_val.push(name.as_str());
                 }
             }
         }
     } else {
-        let mut models_arr = Array::new();
-        for m in models {
-            models_arr.push(m.name.as_str());
-        }
-        local_table.insert("models", Item::Value(Value::Array(models_arr)));
+        set_models_array(local_table, names);
     }
 }
 
-pub fn update_credentials_env(path: &Path, key: &str, value: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).map_err(|e| {
-                anyhow!("Failed to create directory '{}': {}", parent.display(), e)
-            })?;
-        }
+/// Overwrite a provider table's models list with plain verified names.
+fn set_models_array(table: &mut Table, models: &[String]) {
+    let mut arr = Array::new();
+    for m in models {
+        arr.push(m.as_str());
     }
-
-    let mut lines = Vec::new();
-    let mut found = false;
-    let target_prefix = format!("{}=", key);
-
-    if path.exists() {
-        let content = fs::read_to_string(path).map_err(|e| {
-            anyhow!("Failed to read credentials file '{}': {}", path.display(), e)
-        })?;
-        for line in content.lines() {
-            if line.starts_with(&target_prefix) {
-                lines.push(format!("{}={}", key, value));
-                found = true;
-            } else {
-                lines.push(line.to_string());
-            }
-        }
-    }
-
-    if !found {
-        lines.push(format!("{}={}", key, value));
-    }
-
-    let mut new_content = lines.join("\n");
-    new_content.push('\n');
-
-    fs::write(path, new_content).map_err(|e| {
-        if e.kind() == io::ErrorKind::PermissionDenied {
-            anyhow!(
-                "Permission denied writing to '{}'. Please rerun with sudo: sudo routerctl setup",
-                path.display()
-            )
-        } else {
-            anyhow!("Failed to write credentials file '{}': {}", path.display(), e)
-        }
-    })?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = fs::Permissions::from_mode(0o600);
-        let _ = fs::set_permissions(path, perms);
-        apply_root_syntrop_ownership(path);
-    }
-
-    Ok(())
+    table.insert("models", Item::Value(Value::Array(arr)));
 }
 
-pub fn create_synthetic_gguf_stub(model_name: &str) -> Vec<u8> {
-    let mut buf = Vec::new();
-    // Magic: b"GGUF"
-    buf.extend_from_slice(b"GGUF");
-    // Version: 3u32
-    buf.extend_from_slice(&3u32.to_le_bytes());
-    // Tensor count: 0u64
-    buf.extend_from_slice(&0u64.to_le_bytes());
-    // Metadata KV count: 2u64
-    buf.extend_from_slice(&2u64.to_le_bytes());
-
-    // KV 1: general.architecture = "gemma4"
-    let key1 = "general.architecture";
-    buf.extend_from_slice(&(key1.len() as u64).to_le_bytes());
-    buf.extend_from_slice(key1.as_bytes());
-    buf.extend_from_slice(&8u32.to_le_bytes()); // type 8 = string
-    let val1 = "gemma4";
-    buf.extend_from_slice(&(val1.len() as u64).to_le_bytes());
-    buf.extend_from_slice(val1.as_bytes());
-
-    // KV 2: general.name = model_name
-    let key2 = "general.name";
-    buf.extend_from_slice(&(key2.len() as u64).to_le_bytes());
-    buf.extend_from_slice(key2.as_bytes());
-    buf.extend_from_slice(&8u32.to_le_bytes()); // type 8 = string
-    buf.extend_from_slice(&(model_name.len() as u64).to_le_bytes());
-    buf.extend_from_slice(model_name.as_bytes());
-
-    buf
+/// OpenAI shape: {"data": [{"id": ...}]}.
+pub fn parse_openai_model_ids(val: &serde_json::Value) -> Vec<String> {
+    val.get("data")
+        .and_then(|d| d.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| {
+                    m.get("id")
+                        .and_then(|i| i.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
-pub async fn stage_gemma_model(models_dir: &Path, model: &GemmaModelInfo) -> Result<()> {
-    if !models_dir.exists() {
-        fs::create_dir_all(models_dir).map_err(|e| {
-            if e.kind() == io::ErrorKind::PermissionDenied {
-                anyhow!(
-                    "Permission denied creating model directory '{}'. Run with sudo: sudo routerctl setup",
-                    models_dir.display()
-                )
-            } else {
-                anyhow!("Failed to create model directory '{}': {}", models_dir.display(), e)
-            }
-        })?;
-    }
-
-    // Display progress
-    let steps = 20;
-    for step in 1..=steps {
-        let pct = (step * 100) / steps;
-        let filled = step * 2;
-        let empty = 40 - filled;
-        let bar = format!("[{}{}]", "=".repeat(filled), " ".repeat(empty));
-        print!("\r      {} {:>3}% ({})", bar.cyan(), pct, model.size_label);
-        let _ = io::stdout().flush();
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    println!();
-
-    // Stage GGUF artifact file
-    let gguf_file = models_dir.join(format!("{}.gguf", model.name));
-    let gguf_bytes = create_synthetic_gguf_stub(&model.name);
-    fs::write(&gguf_file, gguf_bytes).map_err(|e| {
-        if e.kind() == io::ErrorKind::PermissionDenied {
-            anyhow!(
-                "Permission denied writing model file '{}'. Run with sudo: sudo routerctl setup",
-                gguf_file.display()
-            )
-        } else {
-            anyhow!("Failed to write model file '{}': {}", gguf_file.display(), e)
-        }
-    })?;
-
-    // Stage JSON manifest
-    let manifest_file = models_dir.join(format!("{}.manifest.json", model.name));
-    let manifest_data = serde_json::json!({
-        "name": model.name,
-        "architecture": "gemma4",
-        "format": "gguf",
-        "size": model.size_label,
-        "tier": model.tier,
-        "max_context_tokens": model.max_context,
-        "license": "Apache-2.0",
-        "status": "staged"
-    });
-    let _ = fs::write(&manifest_file, serde_json::to_string_pretty(&manifest_data)?);
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let perms = fs::Permissions::from_mode(0o664);
-        let _ = fs::set_permissions(&gguf_file, perms.clone());
-        let _ = fs::set_permissions(&manifest_file, perms);
-        apply_root_syntrop_ownership(&gguf_file);
-        apply_root_syntrop_ownership(&manifest_file);
-    }
-
-    println!(
-        "      {} Staged artifact to {}",
-        "✔".green(),
-        gguf_file.display().to_string().bold()
-    );
-
-    Ok(())
+/// Ollama shape: {"models": [{"name": ...}]}.
+pub fn parse_ollama_model_ids(val: &serde_json::Value) -> Vec<String> {
+    val.get("models")
+        .and_then(|d| d.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|m| {
+                    m.get("name")
+                        .and_then(|n| n.as_str())
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
-pub fn parse_selection(input: &str, max_option: usize) -> Vec<usize> {
-    let trimmed = input.trim().to_lowercase();
-    if trimmed.is_empty()
-        || trimmed == "s"
-        || trimmed == "skip"
-        || trimmed == "none"
-        || trimmed == "n"
-        || trimmed == "0"
-    {
-        return Vec::new();
-    }
-    if trimmed == "all" || trimmed == format!("{}", max_option + 1) {
-        return (1..=max_option).collect();
-    }
-    let mut selected = Vec::new();
-    for part in trimmed.split(&[',', ' ', ';'][..]) {
-        let p = part.trim();
-        if let Ok(idx) = p.parse::<usize>() {
-            if idx >= 1 && idx <= max_option && !selected.contains(&idx) {
-                selected.push(idx);
-            }
-        }
-    }
-    selected
-}
-
-pub async fn probe_minimax(key: &str) -> Result<(), String> {
+/// GET {base_url}/models and return the live model IDs.
+/// Understands OpenAI ({data:[{id}]}) and Ollama ({models:[{name}]}) shapes.
+pub async fn fetch_model_ids(
+    base_url: &str,
+    api_key: Option<&str>,
+) -> Result<Vec<String>, String> {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(PROBE_TIMEOUT_SECS))
         .build()
         .map_err(|e| e.to_string())?;
-
-    let res = client
-        .get("https://api.minimaxi.chat/v1/models")
-        .header("Authorization", format!("Bearer {}", key.trim()))
-        .send()
-        .await;
-
-    match res {
-        Ok(resp) => {
-            let status = resp.status();
-            if status.is_success() {
-                Ok(())
-            } else if status.as_u16() == 401 || status.as_u16() == 403 {
-                Err(format!("Authentication failed (HTTP {})", status))
-            } else {
-                Err(format!("Endpoint returned HTTP {}", status))
-            }
-        }
-        Err(e) => Err(format!("Network connection failed: {}", e)),
-    }
-}
-
-pub async fn probe_mistral(key: &str) -> Result<(), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let res = client
-        .get("https://api.mistral.ai/v1/models")
-        .header("Authorization", format!("Bearer {}", key.trim()))
-        .send()
-        .await;
-
-    match res {
-        Ok(resp) => {
-            let status = resp.status();
-            if status.is_success() {
-                Ok(())
-            } else if status.as_u16() == 401 || status.as_u16() == 403 {
-                Err(format!("Authentication failed (HTTP {})", status))
-            } else {
-                Err(format!("Endpoint returned HTTP {}", status))
-            }
-        }
-        Err(e) => Err(format!("Network connection failed: {}", e)),
-    }
-}
-
-pub async fn probe_custom(base_url: &str, key: Option<&str>) -> Result<(), String> {
-    let url = format!("{}/models", base_url.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let mut req = client.get(&url);
-    if let Some(k) = key {
+    let base = base_url.trim_end_matches('/');
+    let mut req = client.get(format!("{}/models", base));
+    if let Some(k) = api_key {
         if !k.trim().is_empty() {
             req = req.header("Authorization", format!("Bearer {}", k.trim()));
         }
     }
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+    let status = resp.status();
+    if status.as_u16() == 401 || status.as_u16() == 403 {
+        return Err(format!("Key rejected (HTTP {})", status));
+    }
+    if status.as_u16() == 404 && !base.contains("/v1") {
+        // Native Ollama answers on /api/tags instead.
+        return fetch_ollama_tags(base, &client).await;
+    }
+    if !status.is_success() {
+        return Err(format!("Endpoint returned HTTP {}", status));
+    }
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Bad response: {}", e))?;
+    let mut ids = parse_openai_model_ids(&val);
+    if ids.is_empty() {
+        ids = parse_ollama_model_ids(&val);
+    }
+    if ids.is_empty() {
+        return Err("Endpoint answered but listed no models".to_string());
+    }
+    Ok(ids)
+}
 
-    match req.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            if status.is_success() {
-                Ok(())
+async fn fetch_ollama_tags(
+    base: &str,
+    client: &reqwest::Client,
+) -> Result<Vec<String>, String> {
+    let resp = client
+        .get(format!("{}/api/tags", base))
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+    if !resp.status().is_success() {
+        return Err(format!("Endpoint returned HTTP {}", resp.status()));
+    }
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("Bad response: {}", e))?;
+    let ids = parse_ollama_model_ids(&val);
+    if ids.is_empty() {
+        return Err("Endpoint answered but listed no models".to_string());
+    }
+    Ok(ids)
+}
+
+struct AuditEntry {
+    idx: usize,
+    id: String,
+    kind: String,
+    base_url: String,
+    key_spec: Option<String>,
+}
+
+/// Ping every enabled provider already in the document, in parallel.
+/// Dead entries get switched off; live ones get their model lists refreshed
+/// from the answers. Never prompts.
+async fn audit_existing_providers(doc: &mut DocumentMut, report: &mut Vec<(String, String)>) {
+    let mut entries: Vec<AuditEntry> = Vec::new();
+    if let Some(arr) = doc.get("providers").and_then(|p| p.as_array_of_tables()) {
+        for (idx, table) in arr.iter().enumerate() {
+            if table.get("enabled").and_then(|v| v.as_bool()) == Some(false) {
+                continue;
+            }
+            let id = table
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?")
+                .to_string();
+            let kind = table
+                .get("kind")
+                .and_then(|v| v.as_str())
+                .unwrap_or("openai")
+                .to_string();
+            let base_url = table
+                .get("base_url")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let key_spec = table
+                .get("api_key")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            entries.push(AuditEntry {
+                idx,
+                id,
+                kind,
+                base_url,
+                key_spec,
+            });
+        }
+    }
+    if entries.is_empty() {
+        println!("  {} Nothing configured yet.", "ℹ".blue());
+        return;
+    }
+    let probes = entries.iter().map(|e| async move {
+        if e.kind == "varlink" {
+            if Path::new(&e.base_url).exists() {
+                (e.idx, e.id.clone(), Ok(Vec::new()))
             } else {
-                Err(format!("Endpoint returned HTTP {}", status))
+                (
+                    e.idx,
+                    e.id.clone(),
+                    Err("local socket missing".to_string()),
+                )
+            }
+        } else {
+            let key = e
+                .key_spec
+                .as_deref()
+                .and_then(|spec| resolve_credential(Some(spec), &e.id).unwrap_or(None));
+            match fetch_model_ids(&e.base_url, key.as_deref()).await {
+                Ok(ids) => (e.idx, e.id.clone(), Ok(ids)),
+                Err(err) => (e.idx, e.id.clone(), Err(err)),
             }
         }
-        Err(e) => Err(format!("Connection to '{}' failed: {}", url, e)),
+    });
+    for (idx, id, result) in join_all(probes).await {
+        let arr = match doc
+            .get_mut("providers")
+            .and_then(|p| p.as_array_of_tables_mut())
+        {
+            Some(a) => a,
+            None => continue,
+        };
+        let Some(table) = arr.get_mut(idx) else {
+            continue;
+        };
+        match result {
+            Ok(ids) => {
+                if !ids.is_empty() {
+                    set_models_array(table, &ids);
+                }
+                table.insert("enabled", Item::Value(Value::from(true)));
+                let line = if ids.is_empty() {
+                    "LIVE · local socket present".to_string()
+                } else {
+                    format!("LIVE · {} model(s)", ids.len())
+                };
+                println!("  {} {:<16} {}", "✔".green(), id.bold(), line);
+                report.push((id, line));
+            }
+            Err(e) => {
+                table.insert("enabled", Item::Value(Value::from(false)));
+                println!(
+                    "  {} {:<16} {}",
+                    "✗".red(),
+                    id.bold(),
+                    format!("DEAD · {} (switched off)", e)
+                );
+                report.push((id, format!("OFF · {}", e)));
+            }
+        }
     }
 }
 
-pub async fn validate_huggingface_token(token: &str) -> Result<String, String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
-        .build()
-        .map_err(|e| e.to_string())?;
-
-    let res = client
-        .get("https://huggingface.co/api/whoami-v2")
-        .header("Authorization", format!("Bearer {}", token.trim()))
-        .send()
-        .await;
-
-    match res {
-        Ok(resp) => {
-            let status = resp.status();
-            if status.is_success() {
-                let val: serde_json::Value = resp.json().await.unwrap_or_default();
-                let user = val
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("authenticated user");
-                Ok(user.to_string())
-            } else if status.as_u16() == 401 || status.as_u16() == 403 {
-                Err(format!("Authentication failed (HTTP {})", status))
-            } else {
-                Err(format!("Hugging Face returned HTTP {}", status))
+/// Find what's usable on this machine: a local Ollama server and real
+/// on-disk model files. Registers only what exists. Never prompts.
+async fn autodetect_local(
+    doc: &mut DocumentMut,
+    models_dir: &Path,
+    report: &mut Vec<(String, String)>,
+) {
+    let mut found_any = false;
+    match fetch_model_ids(LOCAL_OLLAMA_URL, None).await {
+        Ok(ids) => {
+            add_custom_provider(
+                doc,
+                "local-ollama",
+                "Local Ollama",
+                "ollama",
+                LOCAL_OLLAMA_URL,
+                None,
+                &ids,
+                true,
+            );
+            println!(
+                "  {} Local Ollama answering with {} model(s).",
+                "✔".green(),
+                ids.len()
+            );
+            report.push((
+                "local-ollama".to_string(),
+                format!("LIVE · {} model(s)", ids.len()),
+            ));
+            found_any = true;
+        }
+        Err(_) => {
+            println!(
+                "  {} No Ollama on this machine (nothing answers port 11434).",
+                "ℹ".blue()
+            );
+        }
+    }
+    let mut files: Vec<String> = Vec::new();
+    if let Ok(rd) = fs::read_dir(models_dir) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let is_gguf = path.extension().and_then(|x| x.to_str()) == Some("gguf");
+            let is_real = entry
+                .metadata()
+                .map(|m| m.len() > MIN_REAL_MODEL_BYTES)
+                .unwrap_or(false);
+            if is_gguf && is_real {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    files.push(stem.to_string());
+                }
             }
         }
-        Err(e) => Err(format!("Connection to Hugging Face failed: {}", e)),
     }
+    if files.is_empty() {
+        println!("  {} No model files in {}.", "ℹ".blue(), models_dir.display());
+    } else {
+        let alive = Path::new(INFERENCED_SOCKET).exists();
+        upsert_local_models(doc, &files, alive);
+        if alive {
+            println!(
+                "  {} {} real model file(s) registered and on.",
+                "✔".green(),
+                files.len()
+            );
+            report.push((
+                "syntrop-local".to_string(),
+                format!("LIVE · {} file(s)", files.len()),
+            ));
+        } else {
+            println!(
+                "  {} {} real model file(s) registered but OFF (local broker not running).",
+                "ℹ".blue(),
+                files.len()
+            );
+            report.push((
+                "syntrop-local".to_string(),
+                "OFF · broker not running".to_string(),
+            ));
+        }
+        found_any = true;
+    }
+    if !found_any {
+        println!("  To run a model here: install Ollama (https://ollama.com),");
+        println!("  pull one with `ollama pull qwen2.5-coder:7b`, then re-run this setup.");
+    }
+}
+
+fn print_summary(report: &[(String, String)]) {
+    println!();
+    println!("{}", "============================================================".cyan().bold());
+    println!("{}", " Verified providers".green().bold());
+    println!("{}", "============================================================".cyan().bold());
+    if report.is_empty() {
+        println!("  (nothing registered)");
+    }
+    for (id, status) in report {
+        println!("  {:<16} {}", id.bold(), status);
+    }
+    println!();
+    println!("Check it:  routerctl models");
+    println!("Talk:      routerctl test");
+    println!();
 }
 
 fn apply_root_syntrop_ownership(path: &Path) {
@@ -914,15 +871,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_selection() {
-        assert_eq!(parse_selection("", 3), Vec::<usize>::new());
-        assert_eq!(parse_selection("s", 3), Vec::<usize>::new());
-        assert_eq!(parse_selection("none", 3), Vec::<usize>::new());
-        assert_eq!(parse_selection("1", 3), vec![1]);
-        assert_eq!(parse_selection("1, 3", 3), vec![1, 3]);
-        assert_eq!(parse_selection("all", 3), vec![1, 2, 3]);
-        assert_eq!(parse_selection("4", 3), vec![1, 2, 3]);
-        assert_eq!(parse_selection("2,2,1", 3), vec![2, 1]);
+    fn test_parse_model_shapes() {
+        let openai: serde_json::Value = serde_json::json!({
+            "data": [{"id": "a"}, {"id": "b"}, {"nope": 1}]
+        });
+        assert_eq!(
+            parse_openai_model_ids(&openai),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        let ollama: serde_json::Value = serde_json::json!({
+            "models": [{"name": "x"}, {"name": "y"}]
+        });
+        assert_eq!(
+            parse_ollama_model_ids(&ollama),
+            vec!["x".to_string(), "y".to_string()]
+        );
+        let empty: serde_json::Value = serde_json::json!({});
+        assert!(parse_openai_model_ids(&empty).is_empty());
+        assert!(parse_ollama_model_ids(&empty).is_empty());
+    }
+
+    #[test]
+    fn test_upsert_local_models() {
+        let mut doc = DocumentMut::new();
+        doc["providers"] = Item::ArrayOfTables(ArrayOfTables::new());
+        upsert_local_models(&mut doc, &["m1".to_string()], true);
+        upsert_local_models(&mut doc, &["m1".to_string(), "m2".to_string()], true);
+        let s = doc.to_string();
+        assert_eq!(s.matches("\"m1\"").count(), 1);
+        assert!(s.contains("\"m2\""));
+        assert!(s.contains("id = \"syntrop-local\""));
     }
 
     #[test]
@@ -930,67 +908,47 @@ mod tests {
         let template = include_str!("../../../../systemd/routerd.toml");
         let mut doc = template.parse::<DocumentMut>().unwrap();
 
-        // MiniMax enable with key
-        configure_minimax(&mut doc, Some("sk-test-minimax-key".to_string()));
+        // MiniMax enable with key and verified models
+        configure_minimax(
+            &mut doc,
+            Some("unit-test-key-minimax".to_string()),
+            Some(vec!["live-model-a".to_string()]),
+        );
         let s = doc.to_string();
-        assert!(s.contains("sk-test-minimax-key"));
+        assert!(s.contains("unit-test-key-minimax"));
+        assert!(s.contains("live-model-a"));
 
         // Mistral disable
-        configure_mistral(&mut doc, None);
+        configure_mistral(&mut doc, None, None);
         let s2 = doc.to_string();
-        assert!(s2.contains("id = \"mistral\""));
-
-        // Add custom provider
-        add_custom_provider(
-            &mut doc,
-            "openrouter-fast",
-            "OpenRouter Gateway",
-            "https://openrouter.ai/api/v1",
-            Some("sk-or-test"),
-            &["anthropic/claude-3.5-sonnet".to_string()],
+        let doc2: DocumentMut = s2.parse().unwrap();
+        let mistral = doc2["providers"]
+            .as_array_of_tables()
+            .unwrap()
+            .iter()
+            .find(|t| t.get("id").and_then(|v| v.as_str()) == Some("mistral"))
+            .unwrap();
+        assert_eq!(
+            mistral.get("enabled").and_then(|v| v.as_bool()),
+            Some(false)
         );
+
+        // Add custom provider twice: must upsert, never duplicate
+        for _ in 0..2 {
+            add_custom_provider(
+                &mut doc,
+                "openrouter-fast",
+                "OpenRouter Gateway",
+                "openai",
+                "https://openrouter.ai/api/v1",
+                Some("sk-or-test"),
+                &["anthropic/claude-3.5-sonnet".to_string()],
+                true,
+            );
+        }
         let s3 = doc.to_string();
-        assert!(s3.contains("openrouter-fast"));
+        assert_eq!(s3.matches("id = \"openrouter-fast\"").count(), 1);
         assert!(s3.contains("anthropic/claude-3.5-sonnet"));
-    }
-
-    #[test]
-    fn test_register_gemma_models() {
-        let template = include_str!("../../../../systemd/routerd.toml");
-        let mut doc = template.parse::<DocumentMut>().unwrap();
-
-        let catalog = get_gemma_catalog();
-        register_gemma_models(&mut doc, &catalog);
-
-        let s = doc.to_string();
-        assert!(s.contains("gemma-4-e2b-it"));
-        assert!(s.contains("gemma-4-e4b-it"));
-        assert!(s.contains("gemma-4-26b-a4b-it"));
-    }
-
-    #[test]
-    fn test_credentials_env_update() {
-        let temp_dir = std::env::temp_dir().join(format!("test_cred_{}", std::process::id()));
-        let _ = fs::create_dir_all(&temp_dir);
-        let cred_file = temp_dir.join("credentials.env");
-
-        update_credentials_env(&cred_file, "HF_TOKEN", "hf_test_abc123").unwrap();
-        let content = fs::read_to_string(&cred_file).unwrap();
-        assert_eq!(content.trim(), "HF_TOKEN=hf_test_abc123");
-
-        // Update existing key
-        update_credentials_env(&cred_file, "HF_TOKEN", "hf_new_val").unwrap();
-        let content2 = fs::read_to_string(&cred_file).unwrap();
-        assert_eq!(content2.trim(), "HF_TOKEN=hf_new_val");
-
-        let _ = fs::remove_dir_all(&temp_dir);
-    }
-
-    #[test]
-    fn test_synthetic_gguf_structure() {
-        let bytes = create_synthetic_gguf_stub("gemma-4-e2b-it");
-        assert!(bytes.starts_with(b"GGUF"));
-        assert!(bytes.len() > 16);
     }
 
     #[test]

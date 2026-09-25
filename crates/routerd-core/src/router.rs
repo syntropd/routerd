@@ -333,6 +333,10 @@ impl RouterEngine {
 
         let p_map = self.providers.read().await;
         for entry in p_map.values() {
+            // Disabled providers never receive traffic.
+            if !entry.config.enabled {
+                continue;
+            }
             let stats = entry.stats.read().await.clone();
 
             for m in &entry.config.models {
@@ -397,6 +401,10 @@ impl RouterEngine {
 
         let p_map = self.providers.read().await;
         for entry in p_map.values() {
+            // Disabled providers are configured but never listed or routed to.
+            if !entry.config.enabled {
+                continue;
+            }
             for m in &entry.config.models {
                 model_items.push(ModelItem {
                     id: m.name.clone(),

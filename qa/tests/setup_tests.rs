@@ -1,186 +1,124 @@
-use routerd_core::RouterConfig;
-use std::fs;
+//! End-to-end tests for `routerctl setup` (verified-providers flow).
+//!
+//! These drive the real binary with piped stdin. The live-enumeration test
+//! uses a local mock OpenAI server; nothing here needs the real internet.
+
 use std::io::Write;
+use std::net::TcpListener;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use tempfile::tempdir;
 
-fn get_routerctl_bin() -> std::path::PathBuf {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let target_bin = manifest_dir.join("../target/debug/routerctl");
-    if !target_bin.exists() {
-        let _ = Command::new("cargo")
-            .args(["build", "--bin", "routerctl"])
-            .current_dir(&manifest_dir)
-            .status();
+fn routerctl_bin() -> PathBuf {
+    let mut p = std::env::current_exe().unwrap();
+    p.pop();
+    if p.ends_with("deps") {
+        p.pop();
     }
-    if target_bin.exists() {
-        return target_bin;
-    }
-    manifest_dir.join("../target/release/routerctl")
+    p.join("routerctl")
 }
 
-#[test]
-fn test_routerctl_setup_end_to_end_wizard() {
-    let routerctl_bin = get_routerctl_bin();
+fn temp_paths(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
+    let dir =
+        std::env::temp_dir().join(format!("routerctl_setup_{}_{}", tag, std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let cfg = dir.join("routerd.toml");
+    let models = dir.join("models");
+    (dir, cfg, models)
+}
 
-    let dir = tempdir().expect("Failed to create temporary directory");
-    let config_path = dir.path().join("routerd.toml");
-    let cred_path = dir.path().join("credentials.env");
-    let models_dir = dir.path().join("models");
-
-    // Inputs:
-    // 1. MiniMax key: sk-minimax-test-key-123
-    // 2. Mistral key: sk-mistral-test-key-456
-    // 3. Custom provider: y, my-vllm, My Local vLLM, http://127.0.0.1:8000/v1, sk-vllm, vllm-model-a, vllm-model-b
-    // 4. HF token: hf_synthetic_test_token_789
-    // 5. Gemma 4 selection: 1, 3
-    let stdin_payload = concat!(
-        "sk-minimax-test-key-123\n",
-        "sk-mistral-test-key-456\n",
-        "y\n",
-        "my-vllm\n",
-        "My Local vLLM\n",
-        "http://127.0.0.1:8000/v1\n",
-        "sk-vllm\n",
-        "vllm-model-a, vllm-model-b\n",
-        "hf_synthetic_test_token_789\n",
-        "1, 3\n"
-    );
-
-    let mut child = Command::new(routerctl_bin)
-        .args([
-            "setup",
-            "--config",
-            config_path.to_str().unwrap(),
-            "--credentials-path",
-            cred_path.to_str().unwrap(),
-            "--models-dir",
-            models_dir.to_str().unwrap(),
-            "--no-reload",
-        ])
+fn run_setup(cfg: &PathBuf, models: &PathBuf, stdin_text: &str) -> (bool, String) {
+    let mut child = Command::new(routerctl_bin())
+        .args(["setup", "--config"])
+        .arg(cfg)
+        .args(["--models-dir"])
+        .arg(models)
+        .arg("--no-reload")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .expect("Failed to spawn routerctl setup");
+        .expect("routerctl binary must exist (cargo build first)");
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(stdin_text.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let mut text = String::from_utf8_lossy(&out.stdout).to_string();
+    text.push_str(&String::from_utf8_lossy(&out.stderr));
+    (out.status.success(), text)
+}
 
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(stdin_payload.as_bytes())
-            .expect("Failed to write to stdin");
+/// Skip everything: providers end up disabled, config still parses.
+#[test]
+fn test_setup_skip_all_disables() {
+    let (_dir, cfg, models) = temp_paths("skip");
+    // minimax skip, mistral skip, custom no
+    let (ok, text) = run_setup(&cfg, &models, "\n\nn\n");
+    assert!(ok, "setup must exit 0 on skips. output:\n{}", text);
+    let content = std::fs::read_to_string(&cfg).unwrap();
+    let doc: toml::Value = content.parse().unwrap();
+    let providers = doc
+        .get("providers")
+        .and_then(|p| p.as_array())
+        .expect("providers array present");
+    assert!(providers
+        .iter()
+        .any(|t| t.get("id").and_then(|v| v.as_str()) == Some("minimax")));
+    for t in providers {
+        let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("?");
+        let enabled = t.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+        match id {
+            // Live localhost Ollama may register itself; it verified by answering.
+            "local-ollama" => {}
+            // Local broker entry must mirror its socket: on iff present.
+            "syntrop-local" => {
+                let socket_up =
+                    std::path::Path::new("/run/syntrop/io.syntrop.Inference1").exists();
+                assert_eq!(enabled, socket_up, "syntrop-local must mirror broker socket");
+            }
+            _ => assert!(!enabled, "{} must be off, nothing verified", id),
+        }
     }
+    assert!(text.contains("Verified providers"));
+}
 
-    let output = child
-        .wait_with_output()
-        .expect("Failed to wait on routerctl setup");
+/// A mock OpenAI server: enumerated models get stored and enabled.
+#[test]
+fn test_setup_enumerates_from_live_server() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        use std::io::{Read, Write};
+        for stream in listener.incoming().take(1) {
+            if let Ok(mut s) = stream {
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf);
+                let body = r#"{"data":[{"id":"mock-a"},{"id":"mock-b"}]}"#;
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                let _ = s.write_all(resp.as_bytes());
+            }
+        }
+    });
+    let (_dir, cfg, models) = temp_paths("live");
+    // minimax skip, mistral skip, custom yes + id/name/url/empty-key
+    let input = format!("\n\ny\nmockprov\nMock\nhttp://127.0.0.1:{}\n", port);
+    let (ok, text) = run_setup(&cfg, &models, &input);
+    assert!(ok, "setup must exit 0. output:\n{}", text);
+    let content = std::fs::read_to_string(&cfg).unwrap();
     assert!(
-        output.status.success(),
-        "routerctl setup exited with error: {}",
-        String::from_utf8_lossy(&output.stderr)
+        content.contains("mock-a"),
+        "enumerated ids stored:\n{}",
+        content
     );
-
-    // 1. Verify credentials.env
-    assert!(cred_path.exists());
-    let cred_content = fs::read_to_string(&cred_path).unwrap();
-    assert!(cred_content.contains("HF_TOKEN=hf_synthetic_test_token_789"));
-
-    // 2. Verify model artifacts in models_dir
-    assert!(models_dir.exists());
-    let e2b_gguf = models_dir.join("gemma-4-e2b-it.gguf");
-    let e2b_manifest = models_dir.join("gemma-4-e2b-it.manifest.json");
-    let moe_gguf = models_dir.join("gemma-4-26b-a4b-it.gguf");
-    let moe_manifest = models_dir.join("gemma-4-26b-a4b-it.manifest.json");
-
-    assert!(e2b_gguf.exists(), "gemma-4-e2b-it.gguf must exist");
-    assert!(e2b_manifest.exists(), "gemma-4-e2b-it.manifest.json must exist");
-    assert!(moe_gguf.exists(), "gemma-4-26b-a4b-it.gguf must exist");
-    assert!(moe_manifest.exists(), "gemma-4-26b-a4b-it.manifest.json must exist");
-
-    // 3. Verify routerd.toml config
-    assert!(config_path.exists());
-    let config_content = fs::read_to_string(&config_path).unwrap();
-    let cfg = RouterConfig::load_from_str(&config_content)
-        .expect("Generated routerd.toml must parse cleanly");
-
-    assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
-    assert!(config_content.contains("min_tokens_per_second"));
-
-    let provider_ids: Vec<&str> = cfg.providers.iter().map(|p| p.id.as_str()).collect();
-    assert!(provider_ids.contains(&"minimax"));
-    assert!(provider_ids.contains(&"mistral"));
-    assert!(provider_ids.contains(&"my-vllm"));
-    assert!(provider_ids.contains(&"syntrop-local"));
-
-    let minimax = cfg.providers.iter().find(|p| p.id == "minimax").unwrap();
-    assert!(minimax.enabled);
-    assert_eq!(minimax.api_key.as_deref(), Some("sk-minimax-test-key-123"));
-
-    let mistral = cfg.providers.iter().find(|p| p.id == "mistral").unwrap();
-    assert!(mistral.enabled);
-    assert_eq!(mistral.api_key.as_deref(), Some("sk-mistral-test-key-456"));
-
-    let vllm = cfg.providers.iter().find(|p| p.id == "my-vllm").unwrap();
-    assert!(vllm.enabled);
-    let vllm_models: Vec<&str> = vllm.models.iter().map(|m| m.name.as_str()).collect();
-    assert!(vllm_models.contains(&"vllm-model-a"));
-    assert!(vllm_models.contains(&"vllm-model-b"));
-
-    let local = cfg.providers.iter().find(|p| p.id == "syntrop-local").unwrap();
-    assert!(local.enabled);
-    let local_models: Vec<&str> = local.models.iter().map(|m| m.name.as_str()).collect();
-    assert!(local_models.contains(&"gemma-4-e2b-it"));
-    assert!(local_models.contains(&"gemma-4-26b-a4b-it"));
-}
-
-#[test]
-fn test_routerctl_setup_skip_leaves_disabled() {
-    let routerctl_bin = get_routerctl_bin();
-
-    let dir = tempdir().expect("Failed to create temporary directory");
-    let config_path = dir.path().join("routerd.toml");
-    let cred_path = dir.path().join("credentials.env");
-    let models_dir = dir.path().join("models");
-
-    // All empty / skipped
-    let stdin_payload = "\n\nn\n\ns\n";
-
-    let mut child = Command::new(routerctl_bin)
-        .args([
-            "setup",
-            "--config",
-            config_path.to_str().unwrap(),
-            "--credentials-path",
-            cred_path.to_str().unwrap(),
-            "--models-dir",
-            models_dir.to_str().unwrap(),
-            "--no-reload",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("Failed to spawn routerctl setup");
-
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(stdin_payload.as_bytes())
-            .expect("Failed to write to stdin");
-    }
-
-    let output = child
-        .wait_with_output()
-        .expect("Failed to wait on routerctl setup");
-    assert!(output.status.success());
-
-    let config_content = fs::read_to_string(&config_path).unwrap();
-    let cfg = RouterConfig::load_from_str(&config_content)
-        .expect("Generated routerd.toml must parse cleanly");
-    assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
-    assert!(config_content.contains("min_tokens_per_second"));
-
-    let minimax = cfg.providers.iter().find(|p| p.id == "minimax").unwrap();
-    assert!(!minimax.enabled, "MiniMax should be marked disabled when skipped");
-
-    let mistral = cfg.providers.iter().find(|p| p.id == "mistral").unwrap();
-    assert!(!mistral.enabled, "Mistral should be marked disabled when skipped");
+    assert!(content.contains("mock-b"));
+    assert!(content.contains("id = \"mockprov\""));
+    assert!(text.contains("LIVE"));
+    server.join().unwrap();
 }
