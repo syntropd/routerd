@@ -151,20 +151,69 @@ pub struct ModelListResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "ProviderModelConfigHelper")]
 pub struct ProviderModelConfig {
     pub name: String,
-    #[serde(default = "default_max_context")]
     pub max_context_tokens: usize,
-    #[serde(default)]
     pub cost_per_input_token: f64,
-    #[serde(default)]
     pub cost_per_output_token: f64,
-    #[serde(default = "default_latency")]
     pub avg_latency_ms: f64,
-    #[serde(default = "default_tps")]
     pub tokens_per_second: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub tier: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum ProviderModelConfigHelper {
+    Simple(String),
+    Detailed {
+        name: String,
+        #[serde(default = "default_max_context")]
+        max_context_tokens: usize,
+        #[serde(default)]
+        cost_per_input_token: f64,
+        #[serde(default)]
+        cost_per_output_token: f64,
+        #[serde(default = "default_latency")]
+        avg_latency_ms: f64,
+        #[serde(default = "default_tps")]
+        tokens_per_second: f64,
+        #[serde(default)]
+        tier: Option<String>,
+    },
+}
+
+impl From<ProviderModelConfigHelper> for ProviderModelConfig {
+    fn from(helper: ProviderModelConfigHelper) -> Self {
+        match helper {
+            ProviderModelConfigHelper::Simple(name) => Self {
+                name,
+                max_context_tokens: default_max_context(),
+                cost_per_input_token: 0.0,
+                cost_per_output_token: 0.0,
+                avg_latency_ms: default_latency(),
+                tokens_per_second: default_tps(),
+                tier: None,
+            },
+            ProviderModelConfigHelper::Detailed {
+                name,
+                max_context_tokens,
+                cost_per_input_token,
+                cost_per_output_token,
+                avg_latency_ms,
+                tokens_per_second,
+                tier,
+            } => Self {
+                name,
+                max_context_tokens,
+                cost_per_input_token,
+                cost_per_output_token,
+                avg_latency_ms,
+                tokens_per_second,
+                tier,
+            },
+        }
+    }
 }
 
 fn default_max_context() -> usize {
