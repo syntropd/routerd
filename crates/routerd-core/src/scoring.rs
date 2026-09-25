@@ -457,5 +457,29 @@ mod tests {
         let scored_slow_allowed =
             ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg, &disabled_thresholds);
         assert!(!scored_slow_allowed.disqualified);
+
+        // 5. select_best returns NoHealthyProvider error when all candidates are below min_tokens_per_second
+        let select_res = ScoringEngine::select_best(
+            &req,
+            &[slow_cand.clone()],
+            &tier_cfg,
+            &thresholds,
+        );
+        match select_res {
+            Err(RouterError::NoHealthyProvider(msg)) => {
+                assert!(msg.contains("No candidate satisfies request"));
+            }
+            other => panic!("Expected Err(RouterError::NoHealthyProvider), got: {:?}", other),
+        }
+
+        // 6. select_best successfully selects healthy fast candidate when mixed
+        let select_mixed = ScoringEngine::select_best(
+            &req,
+            &[slow_cand.clone(), fast_cand.clone()],
+            &tier_cfg,
+            &thresholds,
+        );
+        assert!(select_mixed.is_ok());
+        assert_eq!(select_mixed.unwrap().provider_id, "fast-node");
     }
 }

@@ -1,6 +1,6 @@
 use routerd_core::{
-    CandidateProvider, PressureLevel, ProviderModelConfig, RequestProfile, ScoringEngine,
-    ThresholdsConfig, TierConfig,
+    CandidateProvider, PressureLevel, ProviderModelConfig, RequestProfile, RouterError,
+    ScoringEngine, ThresholdsConfig, TierConfig,
 };
 
 fn make_candidate(
@@ -186,4 +186,28 @@ fn test_min_tokens_per_second_threshold_disqualification() {
     );
     assert_eq!(ranked.len(), 1);
     assert_eq!(ranked[0].provider_id, "normal-model");
+
+    // select_best verifies RouterError::NoHealthyProvider when all candidate providers are slow
+    let all_slow_res = ScoringEngine::select_best(
+        &req,
+        &[slow_cand.clone()],
+        &tier_cfg,
+        &thresholds,
+    );
+    match all_slow_res {
+        Err(RouterError::NoHealthyProvider(err_msg)) => {
+            assert!(err_msg.contains("No candidate satisfies request"));
+        }
+        other => panic!("Expected Err(RouterError::NoHealthyProvider), got: {:?}", other),
+    }
+
+    // select_best selects the healthy candidate when mixed
+    let mixed_res = ScoringEngine::select_best(
+        &req,
+        &[slow_cand.clone(), ok_cand.clone()],
+        &tier_cfg,
+        &thresholds,
+    );
+    assert!(mixed_res.is_ok());
+    assert_eq!(mixed_res.unwrap().provider_id, "normal-model");
 }

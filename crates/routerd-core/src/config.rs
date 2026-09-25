@@ -12,7 +12,7 @@ pub const DEFAULT_CONFIG_PATH: &str = "/etc/syntrop/routerd.toml";
 pub struct DaemonConfig {
     #[serde(default = "default_listen_tcp")]
     pub listen_tcp: String,
-    #[serde(default = "default_listen_unix")]
+    #[serde(default = "default_listen_unix", alias = "listen_socket")]
     pub listen_unix: String,
     #[serde(default = "default_varlink_socket")]
     pub varlink_socket: String,
@@ -164,7 +164,7 @@ fn default_timeout_ms() -> u64 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RouterConfig {
-    #[serde(default)]
+    #[serde(default, alias = "server")]
     pub daemon: DaemonConfig,
     #[serde(default)]
     pub thresholds: ThresholdsConfig,
@@ -292,5 +292,17 @@ mod tests {
         "#;
         let cfg = RouterConfig::load_from_str(toml_str).unwrap();
         assert_eq!(cfg.thresholds.min_tokens_per_second, 25.5);
+    }
+
+    #[test]
+    fn test_server_and_listen_socket_aliases() {
+        let toml_str = r#"
+        [server]
+        listen_tcp = "127.0.0.1:39999"
+        listen_socket = "/run/syntrop/custom-router.sock"
+        "#;
+        let cfg = RouterConfig::load_from_str(toml_str).unwrap();
+        assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:39999");
+        assert_eq!(cfg.daemon.listen_unix, "/run/syntrop/custom-router.sock");
     }
 }

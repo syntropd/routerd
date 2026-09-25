@@ -7,6 +7,12 @@ use tempfile::tempdir;
 fn get_routerctl_bin() -> std::path::PathBuf {
     let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let target_bin = manifest_dir.join("../target/debug/routerctl");
+    if !target_bin.exists() {
+        let _ = Command::new("cargo")
+            .args(["build", "--bin", "routerctl"])
+            .current_dir(&manifest_dir)
+            .status();
+    }
     if target_bin.exists() {
         return target_bin;
     }
@@ -96,6 +102,9 @@ fn test_routerctl_setup_end_to_end_wizard() {
     let cfg = RouterConfig::load_from_str(&config_content)
         .expect("Generated routerd.toml must parse cleanly");
 
+    assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
+    assert!(config_content.contains("min_tokens_per_second"));
+
     let provider_ids: Vec<&str> = cfg.providers.iter().map(|p| p.id.as_str()).collect();
     assert!(provider_ids.contains(&"minimax"));
     assert!(provider_ids.contains(&"mistral"));
@@ -166,6 +175,8 @@ fn test_routerctl_setup_skip_leaves_disabled() {
     let config_content = fs::read_to_string(&config_path).unwrap();
     let cfg = RouterConfig::load_from_str(&config_content)
         .expect("Generated routerd.toml must parse cleanly");
+    assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
+    assert!(config_content.contains("min_tokens_per_second"));
 
     let minimax = cfg.providers.iter().find(|p| p.id == "minimax").unwrap();
     assert!(!minimax.enabled, "MiniMax should be marked disabled when skipped");

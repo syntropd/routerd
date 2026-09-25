@@ -74,6 +74,7 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
 
     // 0. Load or initialize TOML document
     let mut doc = load_or_init_config(&args.config)?;
+    ensure_thresholds_config(&mut doc);
 
     // 1. MiniMax Setup
     println!("{}", "[1/5] MiniMax AI Configuration".bold().green());
@@ -300,6 +301,24 @@ fn save_config(path: &Path, doc: &DocumentMut) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn ensure_thresholds_config(doc: &mut DocumentMut) {
+    if !doc.contains_table("thresholds") && !doc.contains_key("thresholds") {
+        let mut table = Table::new();
+        table.insert("max_latency_ms", Item::Value(Value::from(15000)));
+        table.insert("psi_memory_threshold", Item::Value(Value::from(25.0)));
+        table.insert("max_retries", Item::Value(Value::from(2)));
+        table.insert("rss_limit_mb", Item::Value(Value::from(15)));
+        table.insert("min_tokens_per_second", Item::Value(Value::from(10.0)));
+        doc.insert("thresholds", Item::Table(table));
+    } else if let Some(item) = doc.get_mut("thresholds") {
+        if let Some(t) = item.as_table_like_mut() {
+            if !t.contains_key("min_tokens_per_second") {
+                t.insert("min_tokens_per_second", Item::Value(Value::from(10.0)));
+            }
+        }
+    }
 }
 
 pub fn configure_minimax(doc: &mut DocumentMut, api_key: Option<String>) {
@@ -972,5 +991,35 @@ mod tests {
         let bytes = create_synthetic_gguf_stub("gemma-4-e2b-it");
         assert!(bytes.starts_with(b"GGUF"));
         assert!(bytes.len() > 16);
+    }
+
+    #[test]
+    fn test_ensure_thresholds_config() {
+        let mut empty_doc = DocumentMut::new();
+        ensure_thresholds_config(&mut empty_doc);
+        let s = empty_doc.to_string();
+        assert!(s.contains("[thresholds]"));
+        assert!(s.contains("min_tokens_per_second = 10.0"));
+
+        let mut existing_thresholds = r#"
+        [thresholds]
+        max_latency_ms = 8000
+        "#
+        .parse::<DocumentMut>()
+        .unwrap();
+        ensure_thresholds_config(&mut existing_thresholds);
+        let s2 = existing_thresholds.to_string();
+        assert!(s2.contains("max_latency_ms = 8000"));
+        assert!(s2.contains("min_tokens_per_second = 10.0"));
+
+        let mut custom_thresholds = r#"
+        [thresholds]
+        min_tokens_per_second = 33.3
+        "#
+        .parse::<DocumentMut>()
+        .unwrap();
+        ensure_thresholds_config(&mut custom_thresholds);
+        let s3 = custom_thresholds.to_string();
+        assert!(s3.contains("min_tokens_per_second = 33.3"));
     }
 }
