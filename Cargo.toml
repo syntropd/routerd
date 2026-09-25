@@ -1,0 +1,53 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/routerd-core",
+    "crates/routerd-daemon",
+    "crates/routerctl",
+    "qa",
+]
+
+[workspace.package]
+version = "0.3.0"
+edition = "2021"
+rust-version = "1.80"
+license = "Apache-2.0"
+authors = ["Syntropd Authors <syntropd@users.noreply.github.com>"]
+repository = "https://github.com/syntropd/routerd"
+
+[workspace.dependencies]
+# Internal workspace crates
+routerd-core = { package = "syntrop-routerd-core", version = "0.3.0", path = "crates/routerd-core" }
+
+# Pure Rust async runtime & Linux system interfaces (zero libsystemd.so)
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "signal", "time", "process", "sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+rustix = { version = "0.38", features = ["fs", "net", "process", "event", "system", "param"] }
+
+# CLI & Formatting
+clap = { version = "4.5", features = ["derive", "env", "cargo"] }
+colored = "2.1"
+tabled = { version = "0.17", features = ["ansi"] }
+
+# Serialization & Configuration
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["std"] }
+toml = "0.8"
+
+# Error Handling & Utilities
+thiserror = "2.0"
+anyhow = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+async-trait = "0.1"
+bytes = "1.6"
+futures = "0.3"
+
+# HTTP & Gateway Proxy
+hyper = { version = "1.4", features = ["full"] }
+hyper-util = { version = "0.1", features = ["full"] }
+http-body-util = "0.1"
+axum = { version = "0.7", features = ["tokio", "http2"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
