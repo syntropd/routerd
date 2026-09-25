@@ -118,9 +118,11 @@ impl Default for TierConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
+    #[serde(default)]
     pub id: String,
     #[serde(default)]
     pub name: String,
+    #[serde(default = "default_kind_str")]
     pub kind: String,
     pub base_url: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -135,6 +137,10 @@ pub struct ProviderConfig {
     pub timeout_ms: u64,
     #[serde(default)]
     pub models: Vec<ProviderModelConfig>,
+}
+
+fn default_kind_str() -> String {
+    "openai".to_string()
 }
 
 fn default_tier_str() -> String {
@@ -211,6 +217,21 @@ impl RouterConfig {
                     default_model: None,
                 },
             );
+        }
+        for provider in &mut self.providers {
+            if provider.id.is_empty() {
+                provider.id = if !provider.name.is_empty() {
+                    provider.name.clone()
+                } else {
+                    format!("provider-{}", uuid::Uuid::new_v4())
+                };
+            }
+            if provider.name.is_empty() {
+                provider.name = provider.id.clone();
+            }
+            if provider.kind.is_empty() {
+                provider.kind = "openai".to_string();
+            }
         }
     }
 
