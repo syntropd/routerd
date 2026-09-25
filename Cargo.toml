@@ -33,6 +33,7 @@ tabled = { version = "0.17", features = ["ansi"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["std"] }
 toml = "0.8"
+toml_edit = "0.22"
 
 # Error Handling & Utilities
 thiserror = "2.0"

@@ -36,6 +36,9 @@ async fn main() -> Result<()> {
         Commands::Info(i_args) => {
             commands::info::run_info(&client, i_args, args.json).await?;
         }
+        Commands::Setup(s_args) => {
+            commands::setup::run_setup(&s_args).await?;
+        }
     }
 
     Ok(())

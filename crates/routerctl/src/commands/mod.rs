@@ -4,3 +4,4 @@ pub mod providers;
 pub mod route;
 pub mod status;
 pub mod test;
+pub mod setup;
