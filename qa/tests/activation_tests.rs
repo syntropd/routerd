@@ -91,3 +91,97 @@ fn test_socket_activation_adoption_child_process() {
         );
     }
 }
+
+#[test]
+fn test_socket_activation_dual_stack_and_dual_unix() {
+    if env::var("ROUTERD_ACTIVATION_TEST_CHILD_ALL").as_deref() == Ok("1") {
+        env::set_var("LISTEN_PID", std::process::id().to_string());
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let adopted = check_and_adopt_sockets().expect("Socket adoption should succeed");
+            assert_eq!(
+                adopted.tcp_gateways.len(),
+                2,
+                "Expected 2 TCP gateways (IPv4 and IPv6)"
+            );
+            assert!(
+                adopted.unix_gateway.is_some(),
+                "Expected unix_gateway (router.sock) to be adopted"
+            );
+            assert!(
+                adopted.varlink.is_some(),
+                "Expected varlink (io.syntrop.Router1) to be adopted"
+            );
+        });
+        std::process::exit(0);
+    }
+
+    let dir = tempdir().unwrap();
+    let router_sock_path = dir.path().join("router.sock");
+    let varlink_sock_path = dir.path().join("io.syntrop.Router1");
+
+    let tcp4_listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
+    let tcp6_listener = match StdTcpListener::bind("[::1]:0") {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("IPv6 loopback not available: {}. Skipping test.", e);
+            return;
+        }
+    };
+    let router_unix_listener = std::os::unix::net::UnixListener::bind(&router_sock_path).unwrap();
+    let varlink_unix_listener = std::os::unix::net::UnixListener::bind(&varlink_sock_path).unwrap();
+
+    let fd_tcp4 = tcp4_listener.as_raw_fd();
+    let fd_tcp6 = tcp6_listener.as_raw_fd();
+    let fd_router = router_unix_listener.as_raw_fd();
+    let fd_varlink = varlink_unix_listener.as_raw_fd();
+
+    let current_exe = env::current_exe().unwrap();
+    let mut cmd = Command::new(current_exe);
+    cmd.arg("test_socket_activation_dual_stack_and_dual_unix");
+    cmd.arg("--nocapture");
+    cmd.env("ROUTERD_ACTIVATION_TEST_CHILD_ALL", "1");
+    cmd.env("LISTEN_FDS", "4");
+
+    unsafe {
+        cmd.pre_exec(move || {
+            let pid = libc::getpid().to_string();
+            let pid_cstr = std::ffi::CString::new(pid).unwrap();
+            let key_cstr = std::ffi::CString::new("LISTEN_PID").unwrap();
+            libc::setenv(key_cstr.as_ptr(), pid_cstr.as_ptr(), 1);
+
+            // Dup to FD 3, 4, 5, 6
+            let target_fds = [
+                (fd_tcp4, SD_LISTEN_FDS_START),
+                (fd_tcp6, SD_LISTEN_FDS_START + 1),
+                (fd_router, SD_LISTEN_FDS_START + 2),
+                (fd_varlink, SD_LISTEN_FDS_START + 3),
+            ];
+
+            for (src, dst) in target_fds {
+                if src != dst {
+                    if libc::dup2(src, dst) < 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
+                }
+                libc::fcntl(dst, libc::F_SETFD, 0);
+            }
+
+            Ok(())
+        });
+    }
+
+    let output = cmd.output().expect("Failed to execute child process");
+    if !output.status.success() {
+        panic!(
+            "Child process failed with exit code {:?}!\nstdout: {}\nstderr: {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
