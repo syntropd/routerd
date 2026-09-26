@@ -4,7 +4,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "routerctl")]
 #[command(author = "Syntropd Authors")]
-#[command(version = "0.3.0")]
+#[command(version = "0.3.1")]
 #[command(about = "Operator control CLI for syntrop-routerd")]
 pub struct Cli {
     #[arg(short, long, default_value = "/run/syntrop/io.syntrop.Router1", global = true)]
@@ -28,8 +28,11 @@ pub enum Commands {
     /// Inspect and test LLM providers
     Providers(ProvidersArgs),
 
-    /// List all registered and available models
+    /// List connected provider models
     Models,
+
+    /// Show or set the default model (pinned first when eligible)
+    Default(DefaultArgs),
 
     /// Simulate routing decision and score breakdown
     Route(RouteArgs),
@@ -40,7 +43,7 @@ pub enum Commands {
     /// Introspect Varlink interfaces and IDL specifications
     Info(InfoArgs),
 
-    /// Interactive setup wizard for LLM providers, credentials, and Gemma 4 models
+    /// Verify providers live and enable only what answers
     Setup(SetupArgs),
 }
 
@@ -94,6 +97,20 @@ pub struct TestArgs {
     /// Difficulty tier ('fast' or 'hard')
     #[arg(short, long)]
     pub tier: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct DefaultArgs {
+    /// Model to pin as default (omit to show the current default)
+    pub model: Option<String>,
+
+    /// Path to routerd configuration file
+    #[arg(long, default_value = "/etc/syntrop/routerd.toml")]
+    pub config: PathBuf,
+
+    /// Skip systemctl service reload
+    #[arg(long)]
+    pub no_reload: bool,
 }
 
 #[derive(Args, Debug)]

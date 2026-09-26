@@ -20,14 +20,14 @@ name = "fast"
 latency_weight = 0.60
 cost_weight = 0.30
 capability_weight = 0.10
-default_model = "llama-3.3-70b-versatile"
+# default_model: unset — scoring decides. Set via `routerctl default <model>`.
 
 [tiers.hard]
 name = "hard"
 latency_weight = 0.15
 cost_weight = 0.15
 capability_weight = 0.70
-default_model = "deepseek-chat"
+# default_model: unset — scoring decides. Set via `routerctl default <model>`.
 
 # --- Provider Definitions ---
 

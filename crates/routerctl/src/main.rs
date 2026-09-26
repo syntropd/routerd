@@ -27,6 +27,9 @@ async fn main() -> Result<()> {
         Commands::Models => {
             commands::models::run_models(&client, args.json).await?;
         }
+        Commands::Default(d_args) => {
+            commands::default_model::run_default(&d_args, args.json)?;
+        }
         Commands::Route(r_args) => {
             commands::route::run_route(&client, r_args, args.json).await?;
         }

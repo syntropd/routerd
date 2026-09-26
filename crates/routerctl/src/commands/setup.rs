@@ -36,140 +36,52 @@ fn prompt_line(prompt: &str) -> String {
 }
 
 pub async fn run_setup(args: &SetupArgs) -> Result<()> {
-    println!();
-    println!("{}", "============================================================".cyan().bold());
-    println!("{}", " syntrop-routerd — Provider Setup (every entry is pinged live)".cyan().bold());
-    println!("{}", "============================================================".cyan().bold());
-    println!("Target config:      {}", args.config.display().to_string().bold());
-    println!("Model storage root: {}", args.models_dir.display().to_string().bold());
+    println!("{}", "routerctl setup — ping everything, enable only what answers".bold());
+    println!("config {} · models {}", args.config.display(), args.models_dir.display());
     println!();
 
-    // 0. Load or initialize TOML document
     let mut doc = load_or_init_config(&args.config)?;
     ensure_thresholds_config(&mut doc);
     let mut report: Vec<(String, String)> = Vec::new();
 
-    // 1. Audit whatever is already configured: ping it, switch off the dead.
-    println!("{}", "[1/5] Already configured".bold().green());
+    println!("{}", "configured".cyan());
     audit_existing_providers(&mut doc, &mut report).await;
     println!();
 
-    // 2. This machine: local Ollama server and real model files.
-    println!("{}", "[2/5] This machine (local)".bold().green());
+    println!("{}", "local".cyan());
     autodetect_local(&mut doc, &args.models_dir, &mut report).await;
     println!();
 
-    // 3. MiniMax with live verification.
-    println!("{}", "[3/5] MiniMax AI".bold().green());
-    let minimax_key = prompt_line("MiniMax API key (leave empty to skip): ");
-    if minimax_key.is_empty() {
-        configure_minimax(&mut doc, None, None);
-        report.push(("minimax".to_string(), "OFF · skipped".to_string()));
-        println!("  {} MiniMax skipped and switched off.", "ℹ".blue());
-    } else {
-        print!("  Pinging MiniMax model list... ");
-        let _ = io::stdout().flush();
-        match fetch_model_ids(MINIMAX_BASE_URL, Some(minimax_key.as_str())).await {
-            Ok(ids) => {
-                println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
-                configure_minimax(&mut doc, Some(minimax_key), Some(ids.clone()));
-                report.push((
-                    "minimax".to_string(),
-                    format!("LIVE · {} model(s)", ids.len()),
-                ));
-            }
-            Err(e) => {
-                println!("{} ({})", "DEAD".red().bold(), e);
-                configure_minimax(&mut doc, None, None);
-                report.push(("minimax".to_string(), format!("OFF · {}", e)));
-            }
-        }
-    }
+    println!("{}", "keys".cyan());
+    run_key_step(
+        &mut doc,
+        &mut report,
+        "minimax",
+        MINIMAX_BASE_URL,
+        configure_minimax,
+    )
+    .await;
+    run_key_step(
+        &mut doc,
+        &mut report,
+        "mistral",
+        MISTRAL_BASE_URL,
+        configure_mistral,
+    )
+    .await;
     println!();
 
-    // 4. Mistral with live verification.
-    println!("{}", "[4/5] Mistral AI".bold().green());
-    let mistral_key = prompt_line("Mistral API key (leave empty to skip): ");
-    if mistral_key.is_empty() {
-        configure_mistral(&mut doc, None, None);
-        report.push(("mistral".to_string(), "OFF · skipped".to_string()));
-        println!("  {} Mistral skipped and switched off.", "ℹ".blue());
-    } else {
-        print!("  Pinging Mistral model list... ");
-        let _ = io::stdout().flush();
-        match fetch_model_ids(MISTRAL_BASE_URL, Some(mistral_key.as_str())).await {
-            Ok(ids) => {
-                println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
-                configure_mistral(&mut doc, Some(mistral_key), Some(ids.clone()));
-                report.push((
-                    "mistral".to_string(),
-                    format!("LIVE · {} model(s)", ids.len()),
-                ));
-            }
-            Err(e) => {
-                println!("{} ({})", "DEAD".red().bold(), e);
-                configure_mistral(&mut doc, None, None);
-                report.push(("mistral".to_string(), format!("OFF · {}", e)));
-            }
-        }
-    }
+    println!("{}", "custom".cyan());
+    run_custom_step(&mut doc, &mut report).await;
     println!();
 
-    // 5. Custom OpenAI-style provider with live verification.
-    println!("{}", "[5/5] Custom provider".bold().green());
-    let add_custom = prompt_line("Add a custom provider (local vLLM, OpenRouter...)? [y/N]: ");
-    if add_custom.eq_ignore_ascii_case("y") || add_custom.eq_ignore_ascii_case("yes") {
-        let p_id = prompt_line("  Provider ID (e.g. openrouter, local-vllm): ");
-        let p_id = if p_id.is_empty() { "custom-provider".to_string() } else { p_id };
-        let p_name = prompt_line("  Display name (leave empty for same as ID): ");
-        let p_name = if p_name.is_empty() { p_id.clone() } else { p_name };
-        let base_url = prompt_line("  Base URL (e.g. https://api.openai.com/v1): ");
-        let base_url = if base_url.is_empty() {
-            "https://api.openai.com/v1".to_string()
-        } else {
-            base_url.trim_end_matches('/').to_string()
-        };
-        let p_key = prompt_line("  API key (leave empty if none / local): ");
-        let key_opt = if p_key.is_empty() { None } else { Some(p_key.as_str()) };
-        print!("  Pinging provider model list... ");
-        let _ = io::stdout().flush();
-        match fetch_model_ids(&base_url, key_opt).await {
-            Ok(ids) => {
-                println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
-                add_custom_provider(&mut doc, &p_id, &p_name, "openai", &base_url, key_opt, &ids, true);
-                report.push((p_id, format!("LIVE · {} model(s)", ids.len())));
-            }
-            Err(e) => {
-                println!("{} ({})", "DEAD".red().bold(), e);
-                let save = prompt_line("  Save it anyway (stays OFF until it answers)? [y/N]: ");
-                if save.eq_ignore_ascii_case("y") || save.eq_ignore_ascii_case("yes") {
-                    let models_str = prompt_line("  Model names, comma-separated: ");
-                    let models: Vec<String> = models_str
-                        .split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect();
-                    add_custom_provider(&mut doc, &p_id, &p_name, "openai", &base_url, key_opt, &models, false);
-                    report.push((p_id, format!("OFF · {} (saved anyway)", e)));
-                } else {
-                    report.push((p_id, format!("OFF · {} (not saved)", e)));
-                }
-            }
-        }
-    } else {
-        println!("  {} Skipped custom provider.", "ℹ".blue());
-    }
+    println!("{}", "default".cyan());
+    pick_default_model(&mut doc);
     println!();
 
-    // 6. Write updated configuration
     save_config(&args.config, &doc)?;
-    println!(
-        "{} Saved active configuration to {}",
-        "✔".green().bold(),
-        args.config.display().to_string().bold()
-    );
+    println!("saved {}", args.config.display().to_string().bold());
 
-    // 7. Reload routerd service
     if !args.no_reload {
         reload_service();
     }
@@ -178,7 +90,84 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
     Ok(())
 }
 
-fn load_or_init_config(path: &Path) -> Result<DocumentMut> {
+/// One hosted-key step: prompt, ping /models, store only a live answer.
+async fn run_key_step(
+    doc: &mut DocumentMut,
+    report: &mut Vec<(String, String)>,
+    id: &str,
+    base_url: &str,
+    configure: fn(&mut DocumentMut, Option<String>, Option<Vec<String>>),
+) {
+    let key = prompt_line(&format!("{} key [skip]: ", id));
+    if key.is_empty() {
+        configure(doc, None, None);
+        report.push((id.to_string(), "OFF · skipped".to_string()));
+        println!("  {} OFF · skipped", id.bold());
+        return;
+    }
+    print!("  {} pinging... ", id.bold());
+    let _ = io::stdout().flush();
+    match fetch_model_ids(base_url, Some(key.as_str())).await {
+        Ok(ids) => {
+            println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
+            configure(doc, Some(key), Some(ids.clone()));
+            report.push((id.to_string(), format!("LIVE · {} model(s)", ids.len())));
+        }
+        Err(e) => {
+            println!("{} {}", "OFF ·".red().bold(), e);
+            configure(doc, None, None);
+            report.push((id.to_string(), format!("OFF · {}", e)));
+        }
+    }
+}
+
+/// One custom-provider step: prompt, ping, store only a live answer (or an
+/// explicit save-anyway, which stays OFF).
+async fn run_custom_step(doc: &mut DocumentMut, report: &mut Vec<(String, String)>) {
+    let add_custom = prompt_line("add a custom provider (vLLM, OpenRouter...)? [y/N]: ");
+    if !(add_custom.eq_ignore_ascii_case("y") || add_custom.eq_ignore_ascii_case("yes")) {
+        return;
+    }
+    let p_id = prompt_line("  id [custom-provider]: ");
+    let p_id = if p_id.is_empty() { "custom-provider".to_string() } else { p_id };
+    let p_name = prompt_line("  name [same as id]: ");
+    let p_name = if p_name.is_empty() { p_id.clone() } else { p_name };
+    let base_url = prompt_line("  base URL [https://api.openai.com/v1]: ");
+    let base_url = if base_url.is_empty() {
+        "https://api.openai.com/v1".to_string()
+    } else {
+        base_url.trim_end_matches('/').to_string()
+    };
+    let p_key = prompt_line("  key [none]: ");
+    let key_opt = if p_key.is_empty() { None } else { Some(p_key.as_str()) };
+    print!("  pinging... ");
+    let _ = io::stdout().flush();
+    match fetch_model_ids(&base_url, key_opt).await {
+        Ok(ids) => {
+            println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
+            add_custom_provider(doc, &p_id, &p_name, "openai", &base_url, key_opt, &ids, true);
+            report.push((p_id, format!("LIVE · {} model(s)", ids.len())));
+        }
+        Err(e) => {
+            println!("{} {}", "OFF ·".red().bold(), e);
+            let save = prompt_line("  save anyway (stays OFF)? [y/N]: ");
+            if save.eq_ignore_ascii_case("y") || save.eq_ignore_ascii_case("yes") {
+                let models_str = prompt_line("  models, comma-separated: ");
+                let models: Vec<String> = models_str
+                    .split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                add_custom_provider(doc, &p_id, &p_name, "openai", &base_url, key_opt, &models, false);
+                report.push((p_id, format!("OFF · {} (saved anyway)", e)));
+            } else {
+                report.push((p_id, format!("OFF · {} (not saved)", e)));
+            }
+        }
+    }
+}
+
+pub(crate) fn load_or_init_config(path: &Path) -> Result<DocumentMut> {
     if path.exists() {
         let content = fs::read_to_string(path).map_err(|e| {
             anyhow!("Failed to read configuration file '{}': {}", path.display(), e)
@@ -196,7 +185,7 @@ fn load_or_init_config(path: &Path) -> Result<DocumentMut> {
     }
 }
 
-fn save_config(path: &Path, doc: &DocumentMut) -> Result<()> {
+pub(crate) fn save_config(path: &Path, doc: &DocumentMut) -> Result<()> {
     if let Some(parent) = path.parent() {
         if !parent.exists() {
             fs::create_dir_all(parent).map_err(|e| {
@@ -637,7 +626,7 @@ async fn audit_existing_providers(doc: &mut DocumentMut, report: &mut Vec<(Strin
         }
     }
     if entries.is_empty() {
-        println!("  {} Nothing configured yet.", "ℹ".blue());
+        println!("  nothing configured yet");
         return;
     }
     let probes = entries.iter().map(|e| async move {
@@ -680,21 +669,16 @@ async fn audit_existing_providers(doc: &mut DocumentMut, report: &mut Vec<(Strin
                 }
                 table.insert("enabled", Item::Value(Value::from(true)));
                 let line = if ids.is_empty() {
-                    "LIVE · local socket present".to_string()
+                    "LIVE · local".to_string()
                 } else {
                     format!("LIVE · {} model(s)", ids.len())
                 };
-                println!("  {} {:<16} {}", "✔".green(), id.bold(), line);
+                println!("  {:<16} {}", id.bold(), line);
                 report.push((id, line));
             }
             Err(e) => {
                 table.insert("enabled", Item::Value(Value::from(false)));
-                println!(
-                    "  {} {:<16} {}",
-                    "✗".red(),
-                    id.bold(),
-                    format!("DEAD · {} (switched off)", e)
-                );
+                println!("  {:<16} {} {}", id.bold(), "OFF ·".red().bold(), e);
                 report.push((id, format!("OFF · {}", e)));
             }
         }
@@ -721,11 +705,7 @@ async fn autodetect_local(
                 &ids,
                 true,
             );
-            println!(
-                "  {} Local Ollama answering with {} model(s).",
-                "✔".green(),
-                ids.len()
-            );
+            println!("  {:<16} {}", "ollama".bold(), format!("LIVE · {} model(s)", ids.len()));
             report.push((
                 "local-ollama".to_string(),
                 format!("LIVE · {} model(s)", ids.len()),
@@ -733,10 +713,7 @@ async fn autodetect_local(
             found_any = true;
         }
         Err(_) => {
-            println!(
-                "  {} No Ollama on this machine (nothing answers port 11434).",
-                "ℹ".blue()
-            );
+            println!("  {:<16} OFF · nothing on port 11434", "ollama".bold());
         }
     }
     let mut files: Vec<String> = Vec::new();
@@ -756,26 +733,18 @@ async fn autodetect_local(
         }
     }
     if files.is_empty() {
-        println!("  {} No model files in {}.", "ℹ".blue(), models_dir.display());
+        println!("  {:<16} none in {}", "model files".bold(), models_dir.display());
     } else {
         let alive = Path::new(INFERENCED_SOCKET).exists();
         upsert_local_models(doc, &files, alive);
         if alive {
-            println!(
-                "  {} {} real model file(s) registered and on.",
-                "✔".green(),
-                files.len()
-            );
+            println!("  {:<16} LIVE · {} file(s)", "model files".bold(), files.len());
             report.push((
                 "syntrop-local".to_string(),
                 format!("LIVE · {} file(s)", files.len()),
             ));
         } else {
-            println!(
-                "  {} {} real model file(s) registered but OFF (local broker not running).",
-                "ℹ".blue(),
-                files.len()
-            );
+            println!("  {:<16} OFF · broker not running", "model files".bold());
             report.push((
                 "syntrop-local".to_string(),
                 "OFF · broker not running".to_string(),
@@ -784,16 +753,91 @@ async fn autodetect_local(
         found_any = true;
     }
     if !found_any {
-        println!("  To run a model here: install Ollama (https://ollama.com),");
-        println!("  pull one with `ollama pull qwen2.5-coder:7b`, then re-run this setup.");
+        println!("  hint: install Ollama, `ollama pull qwen2.5-coder:7b`, re-run setup");
+    }
+}
+
+/// Enabled providers' models as (provider id, model name) pairs.
+pub fn live_models(doc: &DocumentMut) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let Some(arr) = doc.get("providers").and_then(|p| p.as_array_of_tables()) else {
+        return out;
+    };
+    for table in arr.iter() {
+        if table.get("enabled").and_then(|v| v.as_bool()) != Some(true) {
+            continue;
+        }
+        let id = table
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?")
+            .to_string();
+        let Some(models) = table.get("models") else { continue };
+        if let Some(names) = models.as_array() {
+            for v in names.iter().filter_map(|v| v.as_str()) {
+                out.push((id.clone(), v.to_string()));
+            }
+        } else if let Some(tables) = models.as_array_of_tables() {
+            for t in tables.iter().filter_map(|t| t.get("name").and_then(|n| n.as_str())) {
+                out.push((id.clone(), t.to_string()));
+            }
+        }
+    }
+    out
+}
+
+/// Accept a 1-based number, an exact model name, or skip/empty.
+pub fn parse_default_pick(input: &str, options: &[(String, String)]) -> Option<String> {
+    let answer = input.trim();
+    if answer.is_empty() || answer.eq_ignore_ascii_case("skip") || answer.eq_ignore_ascii_case("n") {
+        return None;
+    }
+    if let Ok(n) = answer.parse::<usize>() {
+        if n >= 1 && n <= options.len() {
+            return Some(options[n - 1].1.clone());
+        }
+        return None;
+    }
+    options
+        .iter()
+        .find(|(_, name)| name.eq_ignore_ascii_case(answer))
+        .map(|(_, name)| name.clone())
+}
+
+/// Write a tier's default model, creating tables as needed.
+pub fn set_tier_default(doc: &mut DocumentMut, tier: &str, model: &str) {
+    if doc.get("tiers").is_none() {
+        doc["tiers"] = Item::Table(Table::new());
+    }
+    let tiers = &mut doc["tiers"];
+    if tiers.get(tier).is_none() {
+        tiers[tier] = Item::Table(Table::new());
+    }
+    tiers[tier]["default_model"] = Item::Value(Value::from(model));
+}
+
+fn pick_default_model(doc: &mut DocumentMut) {
+    let options = live_models(doc);
+    if options.is_empty() {
+        println!("  no verified models; skipping");
+        return;
+    }
+    for (i, (prov, name)) in options.iter().enumerate() {
+        println!("  {}) {} · {}", i + 1, prov, name.bold());
+    }
+    let answer = prompt_line(&format!("default [1-{}, name, skip]: ", options.len()));
+    match parse_default_pick(&answer, &options) {
+        Some(model) => {
+            set_tier_default(doc, "fast", &model);
+            set_tier_default(doc, "hard", &model);
+            println!("  default → {} (fast + hard)", model.bold());
+        }
+        None => println!("  no default; scoring decides"),
     }
 }
 
 fn print_summary(report: &[(String, String)]) {
-    println!();
-    println!("{}", "============================================================".cyan().bold());
-    println!("{}", " Verified providers".green().bold());
-    println!("{}", "============================================================".cyan().bold());
+    println!("{}", "Verified providers".green().bold());
     if report.is_empty() {
         println!("  (nothing registered)");
     }
@@ -801,9 +845,7 @@ fn print_summary(report: &[(String, String)]) {
         println!("  {:<16} {}", id.bold(), status);
     }
     println!();
-    println!("Check it:  routerctl models");
-    println!("Talk:      routerctl test");
-    println!();
+    println!("models: routerctl models · try it: routerctl test");
 }
 
 fn apply_root_syntrop_ownership(path: &Path) {
@@ -832,7 +874,7 @@ fn get_syntrop_gid() -> Option<u32> {
     None
 }
 
-fn reload_service() {
+pub(crate) fn reload_service() {
     println!();
     println!("Reloading routerd service...");
     let output = std::process::Command::new("systemctl")
@@ -949,6 +991,67 @@ mod tests {
         let s3 = doc.to_string();
         assert_eq!(s3.matches("id = \"openrouter-fast\"").count(), 1);
         assert!(s3.contains("anthropic/claude-3.5-sonnet"));
+    }
+
+    #[test]
+    fn test_default_pick_parsing() {
+        let options = vec![
+            ("prov-a".to_string(), "model-a".to_string()),
+            ("prov-b".to_string(), "model-b".to_string()),
+        ];
+        assert_eq!(parse_default_pick("1", &options), Some("model-a".to_string()));
+        assert_eq!(parse_default_pick("2", &options), Some("model-b".to_string()));
+        assert_eq!(parse_default_pick("model-b", &options), Some("model-b".to_string()));
+        assert_eq!(parse_default_pick("MODEL-A", &options), Some("model-a".to_string()));
+        assert_eq!(parse_default_pick("", &options), None);
+        assert_eq!(parse_default_pick("skip", &options), None);
+        assert_eq!(parse_default_pick("0", &options), None);
+        assert_eq!(parse_default_pick("9", &options), None);
+        assert_eq!(parse_default_pick("nope", &options), None);
+    }
+
+    #[test]
+    fn test_live_models_and_tier_default() {
+        let mut doc = r#"
+[[providers]]
+id = "on"
+enabled = true
+models = ["a", "b"]
+
+[[providers]]
+id = "detailed"
+enabled = true
+
+[[providers.models]]
+name = "d"
+
+[[providers]]
+id = "off"
+enabled = false
+models = ["c"]
+"#
+        .parse::<DocumentMut>()
+        .unwrap();
+        let live = live_models(&doc);
+        assert_eq!(
+            live,
+            vec![
+                ("on".to_string(), "a".to_string()),
+                ("on".to_string(), "b".to_string()),
+                ("detailed".to_string(), "d".to_string()),
+            ]
+        );
+
+        set_tier_default(&mut doc, "fast", "b");
+        set_tier_default(&mut doc, "hard", "b");
+        assert_eq!(
+            doc["tiers"]["fast"]["default_model"].as_str(),
+            Some("b")
+        );
+        assert_eq!(
+            doc["tiers"]["hard"]["default_model"].as_str(),
+            Some("b")
+        );
     }
 
     #[test]

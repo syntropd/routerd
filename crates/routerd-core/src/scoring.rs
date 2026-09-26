@@ -270,6 +270,8 @@ impl ScoringEngine {
     }
 
     /// Rank candidates for a request and return sorted candidates descending by score.
+    /// When the tier config names a default model and it survived scoring, it
+    /// is pinned first; an ineligible default is ignored and scoring stands.
     pub fn rank_candidates(
         req: &RequestProfile,
         candidates: &[CandidateProvider],
@@ -283,6 +285,13 @@ impl ScoringEngine {
             .collect();
 
         scored.sort_by(|a, b| b.total_score.partial_cmp(&a.total_score).unwrap_or(std::cmp::Ordering::Equal));
+        if let Some(def) = tier_cfg.default_model.as_deref() {
+            if let Some(pos) = scored.iter().position(|s| s.model_name == def) {
+                let mut pinned = scored.remove(pos);
+                pinned.reason = format!("{} [tier default]", pinned.reason);
+                scored.insert(0, pinned);
+            }
+        }
         scored
     }
 
@@ -375,6 +384,63 @@ mod tests {
         let scored_slow = ScoringEngine::score_candidate(&req, &slow_cand, &tier_cfg, &thresholds);
 
         assert!(scored_fast.total_score > scored_slow.total_score);
+    }
+
+    #[test]
+    fn test_tier_default_model_pins_first() {
+        let fast_cand = sample_candidate("fast-node", "fast", 0.000001, 40.0, 32000);
+        let slow_cand = sample_candidate("slow-node", "hard", 0.000005, 500.0, 32000);
+        let req = RequestProfile {
+            requested_model: "router:fast".to_string(),
+            requested_tier: "fast".to_string(),
+            estimated_prompt_tokens: 200,
+            estimated_output_tokens: 200,
+            require_stream: false,
+        };
+        let thresholds = ThresholdsConfig::default();
+
+        // No default: scoring order stands (fast first).
+        let plain = TierConfig {
+            name: "fast".to_string(),
+            latency_weight: 0.70,
+            cost_weight: 0.20,
+            capability_weight: 0.10,
+            default_model: None,
+        };
+        let ranked = ScoringEngine::rank_candidates(
+            &req,
+            &[fast_cand.clone(), slow_cand.clone()],
+            &plain,
+            &thresholds,
+        );
+        assert_eq!(ranked[0].model_name, "fast-node-model");
+
+        // Eligible default jumps the queue even though it scores lower.
+        let pinned = TierConfig {
+            default_model: Some("slow-node-model".to_string()),
+            ..plain.clone()
+        };
+        let ranked = ScoringEngine::rank_candidates(
+            &req,
+            &[fast_cand.clone(), slow_cand.clone()],
+            &pinned,
+            &thresholds,
+        );
+        assert_eq!(ranked[0].model_name, "slow-node-model");
+        assert!(ranked[0].reason.contains("[tier default]"));
+
+        // Unknown default is ignored; scoring order stands.
+        let missing = TierConfig {
+            default_model: Some("nope".to_string()),
+            ..plain.clone()
+        };
+        let ranked = ScoringEngine::rank_candidates(
+            &req,
+            &[fast_cand, slow_cand],
+            &missing,
+            &thresholds,
+        );
+        assert_eq!(ranked[0].model_name, "fast-node-model");
     }
 
     #[test]

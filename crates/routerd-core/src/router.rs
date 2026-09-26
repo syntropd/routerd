@@ -464,7 +464,7 @@ impl RouterEngine {
 
         DaemonStatusInfo {
             status: "active".to_string(),
-            version: "0.3.0".to_string(),
+            version: "0.3.1".to_string(),
             uptime_seconds: self.start_time.elapsed().as_secs(),
             total_requests: self.total_requests.load(Ordering::Relaxed),
             active_requests: self.active_requests.load(Ordering::Relaxed),
