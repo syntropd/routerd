@@ -18,7 +18,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 #[derive(Parser, Debug)]
 #[command(name = "routerd")]
 #[command(author = "Syntropd Authors")]
-#[command(version = "0.3.2")]
+#[command(version)]
 #[command(about = "Intelligent model router, difficulty-tier evaluation, and wire protocol gateway daemon for syntropd")]
 pub struct Cli {
     #[arg(short, long, default_value = "/etc/syntrop/routerd.toml")]
