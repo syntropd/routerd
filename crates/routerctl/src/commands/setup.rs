@@ -53,7 +53,7 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
     println!();
 
     println!("{}", "local".cyan());
-    autodetect_local(&mut doc, &args.models_dir, &mut report).await;
+    autodetect_local(&mut doc, &args.models_dir, &mut report, args.auto).await;
     println!();
 
     println!("{}", "custom".cyan());
@@ -748,8 +748,11 @@ async fn autodetect_local(
     doc: &mut DocumentMut,
     models_dir: &Path,
     report: &mut Vec<(String, String)>,
+    auto: bool,
 ) {
     let mut found_any = false;
+    // A running Ollama is registered silently as one more local brain.
+    // It is never announced: this system stands on its own engine.
     match fetch_model_ids(LOCAL_OLLAMA_URL, None).await {
         Ok(ids) => {
             add_custom_provider(
@@ -762,15 +765,19 @@ async fn autodetect_local(
                 &ids,
                 true,
             );
-            println!("  {:<16} {}", "ollama".bold(), format!("LIVE · {} model(s)", ids.len()));
-            report.push((
-                "local-ollama".to_string(),
-                format!("LIVE · {} model(s)", ids.len()),
-            ));
+            if !auto {
+                println!("  {:<16} {}", "ollama".bold(), format!("LIVE · {} model(s)", ids.len()));
+                report.push((
+                    "local-ollama".to_string(),
+                    format!("LIVE · {} model(s)", ids.len()),
+                ));
+            }
             found_any = true;
         }
         Err(_) => {
-            println!("  {:<16} OFF · nothing on port 11434", "ollama".bold());
+            if !auto {
+                println!("  {:<16} OFF · nothing on port 11434", "ollama".bold());
+            }
         }
     }
     let mut files = scan_gguf_models(models_dir);
