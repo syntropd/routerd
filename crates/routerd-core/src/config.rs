@@ -251,12 +251,12 @@ impl RouterConfig {
     }
 }
 
-/// Local-only rule, shared by setup and the daemon. Ollama (including your
-/// own LAN nodes) and the local varlink broker are always local. Anything
-/// else must live on loopback; cloud APIs are refused.
+/// Local-only rule, shared by setup and the daemon. The owned engine
+/// and the local varlink broker are always local. Anything else must
+/// live on loopback; cloud APIs are refused.
 pub fn is_local_provider(kind: &str, base_url: &str) -> bool {
     match kind.to_ascii_lowercase().as_str() {
-        "ollama" | "varlink" | "syntrop" | "runtimed" => true,
+        "varlink" | "syntrop" | "runtimed" => true,
         _ => is_localhost_url(base_url),
     }
 }
@@ -332,9 +332,8 @@ mod tests {
 
     #[test]
     fn test_local_provider_rule() {
-        // Ollama anywhere (your hardware), varlink broker, localhost APIs.
-        assert!(is_local_provider("ollama", "http://192.168.1.100:11434"));
-        assert!(is_local_provider("ollama", "http://127.0.0.1:11434/v1"));
+        // Owned engine, varlink broker, localhost APIs.
+        assert!(is_local_provider("runtimed", "/run/syntrop/io.syntrop.Runtime1"));
         assert!(is_local_provider("varlink", "/run/syntrop/io.syntrop.Inference1"));
         assert!(is_local_provider("openai", "http://127.0.0.1:8000/v1"));
         assert!(is_local_provider("openai", "http://localhost:8000/v1"));

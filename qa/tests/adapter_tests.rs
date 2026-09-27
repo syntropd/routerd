@@ -52,29 +52,30 @@ async fn test_adapter_factory_instantiation() {
     let mm_models = adapter_minimax.list_models().await.unwrap();
     assert_eq!(mm_models, vec!["abab6.5s-chat"]);
 
-    let p_ollama = ProviderConfig {
-        id: "ollama-lan".to_string(),
-        name: "Ollama LAN".to_string(),
-        kind: "ollama".to_string(),
-        base_url: "http://192.168.1.100:11434".to_string(),
+    let p_runtimed = ProviderConfig {
+        id: "runtimed-local".to_string(),
+        name: "Runtimed Owned Engine".to_string(),
+        kind: "runtimed".to_string(),
+        // Nonexistent socket: must fall back to the configured list.
+        base_url: "/tmp/qa-nope/Runtime1".to_string(),
         api_key: None,
         tier: "fast".to_string(),
-        weight: 1.1,
+        weight: 1.3,
         enabled: true,
-        timeout_ms: 20000,
+        timeout_ms: 10000,
         models: vec![ProviderModelConfig {
-            name: "qwen2.5-coder:7b".to_string(),
-            max_context_tokens: 32768,
+            name: "gemma-4-E2B-it-Q4_K_M".to_string(),
+            max_context_tokens: 8192,
             cost_per_input_token: 0.0,
             cost_per_output_token: 0.0,
-            avg_latency_ms: 95.0,
-            tokens_per_second: 110.0,
+            avg_latency_ms: 40.0,
+            tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
         }],
     };
-    let adapter_ollama = create_adapter(&p_ollama);
-    let ollama_models = adapter_ollama.list_models().await.unwrap();
-    assert_eq!(ollama_models, vec!["qwen2.5-coder:7b"]);
+    let adapter_runtimed = create_adapter(&p_runtimed);
+    let runtimed_models = adapter_runtimed.list_models().await.unwrap();
+    assert_eq!(runtimed_models, vec!["gemma-4-E2B-it-Q4_K_M"]);
 
     let p_varlink = ProviderConfig {
         id: "syntrop-local".to_string(),

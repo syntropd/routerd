@@ -12,11 +12,10 @@ fn test_template_config_parsing() {
     assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:32768");
     assert_eq!(cfg.daemon.varlink_socket, "/run/syntrop/io.syntrop.Router1");
     assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
-    assert_eq!(cfg.providers.len(), 3);
+    assert_eq!(cfg.providers.len(), 2);
 
     let provider_ids: Vec<&str> = cfg.providers.iter().map(|p| p.id.as_str()).collect();
-    assert!(provider_ids.contains(&"ollama-lan-1"));
-    assert!(provider_ids.contains(&"ollama-lan-2"));
+    assert!(provider_ids.contains(&"runtimed-local"));
     assert!(provider_ids.contains(&"syntrop-local"));
 
     // Template ships local-only and switched off; setup enables verified.

@@ -14,8 +14,6 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value};
 const PROBE_TIMEOUT_SECS: u64 = 5;
 /// Files smaller than this are stubs, not models.
 const MIN_REAL_MODEL_BYTES: u64 = 1_000_000;
-/// Well-known local Ollama endpoint (OpenAI-compatible path).
-const LOCAL_OLLAMA_URL: &str = "http://127.0.0.1:11434/v1";
 /// Socket proving the owned runtimed engine is alive.
 const RUNTIMED_SOCKET: &str = "/run/syntrop/io.syntrop.Runtime1";
 // Dormant in local-only mode; kept (and unit-tested) for cloud restore.
@@ -25,7 +23,7 @@ const MINIMAX_BASE_URL: &str = "https://api.minimaxi.chat/v1";
 const MISTRAL_BASE_URL: &str = "https://api.mistral.ai/v1";
 
 // Setup registers only servers and model files it verifies live.
-// There is deliberately no model-download step: bring Ollama or GGUF files,
+// There is deliberately no model-download step: bring GGUF files,
 // re-run setup, and they get picked up.
 
 fn prompt_line(prompt: &str) -> String {
@@ -53,7 +51,7 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
     println!();
 
     println!("{}", "local".cyan());
-    autodetect_local(&mut doc, &args.models_dir, &mut report, args.auto).await;
+    autodetect_local(&mut doc, &args.models_dir, &mut report).await;
     println!();
 
     println!("{}", "custom".cyan());
@@ -533,24 +531,8 @@ pub fn parse_openai_model_ids(val: &serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Ollama shape: {"models": [{"name": ...}]}.
-pub fn parse_ollama_model_ids(val: &serde_json::Value) -> Vec<String> {
-    val.get("models")
-        .and_then(|d| d.as_array())
-        .map(|a| {
-            a.iter()
-                .filter_map(|m| {
-                    m.get("name")
-                        .and_then(|n| n.as_str())
-                        .map(|s| s.to_string())
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// GET {base_url}/models and return the live model IDs.
-/// Understands OpenAI ({data:[{id}]}) and Ollama ({models:[{name}]}) shapes.
+/// Understands the OpenAI shape ({data:[{id}]}).
 pub async fn fetch_model_ids(
     base_url: &str,
     api_key: Option<&str>,
@@ -574,10 +556,6 @@ pub async fn fetch_model_ids(
     if status.as_u16() == 401 || status.as_u16() == 403 {
         return Err(format!("Key rejected (HTTP {})", status));
     }
-    if status.as_u16() == 404 && !base.contains("/v1") {
-        // Native Ollama answers on /api/tags instead.
-        return fetch_ollama_tags(base, &client).await;
-    }
     if !status.is_success() {
         return Err(format!("Endpoint returned HTTP {}", status));
     }
@@ -585,33 +563,7 @@ pub async fn fetch_model_ids(
         .json()
         .await
         .map_err(|e| format!("Bad response: {}", e))?;
-    let mut ids = parse_openai_model_ids(&val);
-    if ids.is_empty() {
-        ids = parse_ollama_model_ids(&val);
-    }
-    if ids.is_empty() {
-        return Err("Endpoint answered but listed no models".to_string());
-    }
-    Ok(ids)
-}
-
-async fn fetch_ollama_tags(
-    base: &str,
-    client: &reqwest::Client,
-) -> Result<Vec<String>, String> {
-    let resp = client
-        .get(format!("{}/api/tags", base))
-        .send()
-        .await
-        .map_err(|e| format!("Connection failed: {}", e))?;
-    if !resp.status().is_success() {
-        return Err(format!("Endpoint returned HTTP {}", resp.status()));
-    }
-    let val: serde_json::Value = resp
-        .json()
-        .await
-        .map_err(|e| format!("Bad response: {}", e))?;
-    let ids = parse_ollama_model_ids(&val);
+    let ids = parse_openai_model_ids(&val);
     if ids.is_empty() {
         return Err("Endpoint answered but listed no models".to_string());
     }
@@ -742,44 +694,14 @@ async fn audit_existing_providers(doc: &mut DocumentMut, report: &mut Vec<(Strin
     }
 }
 
-/// Find what's usable on this machine: a local Ollama server and real
-/// on-disk model files. Registers only what exists. Never prompts.
+/// Find real on-disk model files and register them under the owned
+/// engine. Registers only what exists. Never prompts.
 async fn autodetect_local(
     doc: &mut DocumentMut,
     models_dir: &Path,
     report: &mut Vec<(String, String)>,
-    auto: bool,
 ) {
     let mut found_any = false;
-    // A running Ollama is registered silently as one more local brain.
-    // It is never announced: this system stands on its own engine.
-    match fetch_model_ids(LOCAL_OLLAMA_URL, None).await {
-        Ok(ids) => {
-            add_custom_provider(
-                doc,
-                "local-ollama",
-                "Local Ollama",
-                "ollama",
-                LOCAL_OLLAMA_URL,
-                None,
-                &ids,
-                true,
-            );
-            if !auto {
-                println!("  {:<16} {}", "ollama".bold(), format!("LIVE · {} model(s)", ids.len()));
-                report.push((
-                    "local-ollama".to_string(),
-                    format!("LIVE · {} model(s)", ids.len()),
-                ));
-            }
-            found_any = true;
-        }
-        Err(_) => {
-            if !auto {
-                println!("  {:<16} OFF · nothing on port 11434", "ollama".bold());
-            }
-        }
-    }
     let mut files = scan_gguf_models(models_dir);
     files.extend(scan_gguf_models(&models_dir.join("gguf")));
     files.sort();
@@ -808,7 +730,7 @@ async fn autodetect_local(
         found_any = true;
     }
     if !found_any {
-        println!("  hint: install Ollama, `ollama pull qwen2.5-coder:7b`, re-run setup");
+        println!("  hint: place GGUF files under /var/lib/models/gguf, re-run setup");
     }
 }
 
@@ -995,16 +917,8 @@ mod tests {
             parse_openai_model_ids(&openai),
             vec!["a".to_string(), "b".to_string()]
         );
-        let ollama: serde_json::Value = serde_json::json!({
-            "models": [{"name": "x"}, {"name": "y"}]
-        });
-        assert_eq!(
-            parse_ollama_model_ids(&ollama),
-            vec!["x".to_string(), "y".to_string()]
-        );
         let empty: serde_json::Value = serde_json::json!({});
         assert!(parse_openai_model_ids(&empty).is_empty());
-        assert!(parse_ollama_model_ids(&empty).is_empty());
     }
 
     #[test]
@@ -1043,13 +957,13 @@ mod tests {
     fn test_auto_default_prefers_engine() {
         let mut doc = DocumentMut::new();
         doc["providers"] = Item::ArrayOfTables(ArrayOfTables::new());
-        // Ollama first in file order; the engine must still win.
+        // A foreign provider first in file order; the engine must still win.
         let arr = doc["providers"].as_array_of_tables_mut().unwrap();
-        let mut ollama = Table::new();
-        ollama.insert("id", Item::Value(Value::from("local-ollama")));
-        ollama.insert("enabled", Item::Value(Value::from(true)));
-        set_models_array(&mut ollama, &["qwen".to_string()]);
-        arr.push(ollama);
+        let mut cloud = Table::new();
+        cloud.insert("id", Item::Value(Value::from("cloud-x")));
+        cloud.insert("enabled", Item::Value(Value::from(true)));
+        set_models_array(&mut cloud, &["qwen".to_string()]);
+        arr.push(cloud);
         upsert_runtimed_models(&mut doc, &["gemma".to_string()], true);
         auto_default_model(&mut doc);
         let s = doc.to_string();

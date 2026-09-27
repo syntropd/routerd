@@ -4,7 +4,7 @@
 
 ## Architecture
 
-- **`crates/routerd-core`**: Core routing engine, multi-dimensional scoring formula (latency, cost, context limits, difficulty tiers `fast`/`hard`), multi-provider protocol adapters (OpenAI-compatible, MiniMax, remote LAN Ollama, local syntrop Varlink bridge), kernel PSI telemetry client, and zero cross-chat context contamination.
+- **`crates/routerd-core`**: Core routing engine, multi-dimensional scoring formula (latency, cost, context limits, difficulty tiers `fast`/`hard`), multi-provider protocol adapters (OpenAI-compatible, MiniMax, owned runtimed engine, local syntrop Varlink bridge), kernel PSI telemetry client, and zero cross-chat context contamination.
 - **`crates/routerd-daemon`**: Axum/Hyper dual-stack reverse proxy (TCP port 32768 and `/run/syntrop/router.sock`), pure Rust `$LISTEN_FDS` socket activation, pure Rust Varlink IPC server (`io.syntrop.Router1`), `sd_notify` heartbeat, and `/proc/self/statm` RSS memory monitor (<15MB RSS target).
 - **`crates/routerctl`**: CLI control tool for inspecting router status, testing providers, benchmarking TTFT/latency, querying available models, and testing routing decisions.
 - **`systemd/`**: Socket and service unit definitions (`routerd.socket`, `routerd.service`) and default configuration template (`routerd.toml`).

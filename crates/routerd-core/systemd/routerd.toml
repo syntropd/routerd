@@ -33,47 +33,18 @@ capability_weight = 0.70
 # Cloud providers were removed; the daemon refuses non-local entries.
 # Restore: re-add a [[providers]] block and re-run setup.
 
-# 1. Remote LAN Ollama Node 1
+# 1. Owned runtimed engine (this machine's brain; setup enables it)
 [[providers]]
-id = "ollama-lan-1"
-name = "Local LAN Inference Worker 1"
-kind = "ollama"
-base_url = "http://192.168.1.100:11434"
+id = "runtimed-local"
+name = "Runtimed Owned Engine"
+kind = "runtimed"
+base_url = "/run/syntrop/io.syntrop.Runtime1"
 tier = "fast"
-weight = 1.1
+weight = 1.3
 enabled = false
-timeout_ms = 20000
+timeout_ms = 10000
 
-[[providers.models]]
-name = "qwen2.5-coder:7b"
-max_context_tokens = 32768
-cost_per_input_token = 0.0
-cost_per_output_token = 0.0
-avg_latency_ms = 95.0
-tokens_per_second = 110.0
-tier = "fast"
-
-# 2. Remote LAN Ollama Node 2
-[[providers]]
-id = "ollama-lan-2"
-name = "Local LAN Inference Worker 2"
-kind = "ollama"
-base_url = "http://192.168.1.101:11434"
-tier = "hard"
-weight = 1.1
-enabled = false
-timeout_ms = 45000
-
-[[providers.models]]
-name = "deepseek-r1:32b"
-max_context_tokens = 65536
-cost_per_input_token = 0.0
-cost_per_output_token = 0.0
-avg_latency_ms = 280.0
-tokens_per_second = 45.0
-tier = "hard"
-
-# 3. Local syntrop Varlink Bridge (Hardware Accelerated)
+# 2. Local syntrop Varlink Bridge (Hardware Accelerated)
 [[providers]]
 id = "syntrop-local"
 name = "Syntrop Local Inferenced Broker"

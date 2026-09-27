@@ -3,7 +3,7 @@
 //! OpenAI-shaped completions, health, and model lists.
 
 use futures::StreamExt;
-use routerd_core::adapters::{create_adapter, ProviderAdapter};
+use routerd_core::adapters::create_adapter;
 use routerd_core::config::ProviderConfig;
 use routerd_core::models::{ChatCompletionRequest, ChatMessage};
 use serde_json::{json, Value};

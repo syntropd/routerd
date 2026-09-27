@@ -79,17 +79,15 @@ fn test_setup_skip_all_disables() {
         .expect("providers array present");
     assert!(providers
         .iter()
-        .any(|t| t.get("id").and_then(|v| v.as_str()) == Some("ollama-lan-1")));
+        .any(|t| t.get("id").and_then(|v| v.as_str()) == Some("runtimed-local")));
     for t in providers {
         let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("?");
         let enabled = t.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
         match id {
-            // Live localhost Ollama may register itself; it verified by answering.
-            "local-ollama" => {}
             // No model files are staged in this test, so setup never touches
-            // the template's syntrop-local entry: it must stay off either way.
-            "syntrop-local" => {
-                assert!(!enabled, "syntrop-local must stay off with no model files");
+            // the template entries: they must stay off either way.
+            "syntrop-local" | "runtimed-local" => {
+                assert!(!enabled, "{} must stay off with no model files", id);
             }
             _ => assert!(!enabled, "{} must be off, nothing verified", id),
         }
@@ -153,7 +151,7 @@ models = ["MiniMax-M3"]
 
 [[providers]]
 id = "lan-one"
-kind = "ollama"
+kind = "openai"
 base_url = "http://127.0.0.1:9"
 enabled = true
 models = ["local-still-probed"]

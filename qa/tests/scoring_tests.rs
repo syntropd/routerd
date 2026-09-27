@@ -120,7 +120,7 @@ fn test_psi_telemetry_penalty_on_local() {
     let mut local_cand = make_candidate("local-syntrop", "fast", 0.0, 30.0, 200.0, 16384);
     local_cand.provider_kind = "varlink".to_string();
 
-    let remote_cand = make_candidate("remote-ollama", "fast", 0.0, 80.0, 100.0, 16384);
+    let remote_cand = make_candidate("remote-worker", "fast", 0.0, 80.0, 100.0, 16384);
 
     let req = RequestProfile {
         requested_model: "router:fast".to_string(),
