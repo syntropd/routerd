@@ -10,11 +10,13 @@ use std::sync::Arc;
 pub mod minimax;
 pub mod ollama;
 pub mod openai;
+pub mod runtimed;
 pub mod varlink_bridge;
 
 pub use minimax::MiniMaxAdapter;
 pub use ollama::OllamaAdapter;
 pub use openai::OpenAICompatibleAdapter;
+pub use runtimed::RuntimedAdapter;
 pub use varlink_bridge::VarlinkBridgeAdapter;
 
 pub type ByteStream = Pin<Box<dyn Stream<Item = Result<Bytes>> + Send>>;
@@ -48,6 +50,7 @@ pub fn create_adapter(config: &ProviderConfig) -> Arc<dyn ProviderAdapter> {
         "minimax" => Arc::new(MiniMaxAdapter::new(config)),
         "ollama" => Arc::new(OllamaAdapter::new(config)),
         "varlink" | "syntrop" => Arc::new(VarlinkBridgeAdapter::new(config)),
+        "runtimed" => Arc::new(RuntimedAdapter::new(config)),
         _ => Arc::new(OpenAICompatibleAdapter::new(config)),
     }
 }

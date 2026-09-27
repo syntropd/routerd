@@ -132,4 +132,8 @@ pub struct SetupArgs {
     /// Skip systemctl service reload
     #[arg(long)]
     pub no_reload: bool,
+
+    /// Non-interactive: skip prompts, auto-pick the first live model
+    #[arg(long)]
+    pub auto: bool,
 }

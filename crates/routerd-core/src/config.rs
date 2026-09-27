@@ -256,7 +256,7 @@ impl RouterConfig {
 /// else must live on loopback; cloud APIs are refused.
 pub fn is_local_provider(kind: &str, base_url: &str) -> bool {
     match kind.to_ascii_lowercase().as_str() {
-        "ollama" | "varlink" | "syntrop" => true,
+        "ollama" | "varlink" | "syntrop" | "runtimed" => true,
         _ => is_localhost_url(base_url),
     }
 }

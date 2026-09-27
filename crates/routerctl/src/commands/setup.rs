@@ -16,8 +16,8 @@ const PROBE_TIMEOUT_SECS: u64 = 5;
 const MIN_REAL_MODEL_BYTES: u64 = 1_000_000;
 /// Well-known local Ollama endpoint (OpenAI-compatible path).
 const LOCAL_OLLAMA_URL: &str = "http://127.0.0.1:11434/v1";
-/// Socket proving the local inference broker is alive.
-const INFERENCED_SOCKET: &str = "/run/syntrop/io.syntrop.Inference1";
+/// Socket proving the owned runtimed engine is alive.
+const RUNTIMED_SOCKET: &str = "/run/syntrop/io.syntrop.Runtime1";
 // Dormant in local-only mode; kept (and unit-tested) for cloud restore.
 #[allow(dead_code)]
 const MINIMAX_BASE_URL: &str = "https://api.minimaxi.chat/v1";
@@ -57,11 +57,19 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
     println!();
 
     println!("{}", "custom".cyan());
-    run_custom_step(&mut doc, &mut report).await;
+    if args.auto {
+        println!("  skipped (--auto)");
+    } else {
+        run_custom_step(&mut doc, &mut report).await;
+    }
     println!();
 
     println!("{}", "default".cyan());
-    pick_default_model(&mut doc);
+    if args.auto {
+        auto_default_model(&mut doc);
+    } else {
+        pick_default_model(&mut doc);
+    }
     println!();
 
     save_config(&args.config, &doc)?;
@@ -363,7 +371,29 @@ pub fn add_custom_provider(
 
 /// Register real on-disk model files under the local varlink provider.
 /// Merges with whatever is already there; never duplicates.
-pub fn upsert_local_models(doc: &mut DocumentMut, names: &[String], enabled: bool) {
+/// Register GGUF files under the owned runtimed engine.
+pub fn upsert_runtimed_models(doc: &mut DocumentMut, names: &[String], enabled: bool) {
+    upsert_provider_models(
+        doc,
+        names,
+        enabled,
+        "runtimed-local",
+        "Runtimed Owned Engine",
+        "runtimed",
+        RUNTIMED_SOCKET,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn upsert_provider_models(
+    doc: &mut DocumentMut,
+    names: &[String],
+    enabled: bool,
+    id: &str,
+    name: &str,
+    kind: &str,
+    base_url: &str,
+) {
     if names.is_empty() {
         return;
     }
@@ -380,8 +410,8 @@ pub fn upsert_local_models(doc: &mut DocumentMut, names: &[String], enabled: boo
             .get("id")
             .and_then(|i| i.as_str())
             .or_else(|| table.get("name").and_then(|n| n.as_str()));
-        let kind = table.get("kind").and_then(|k| k.as_str()).unwrap_or("");
-        if id_str == Some("syntrop-local") || kind == "varlink" {
+        let table_kind = table.get("kind").and_then(|k| k.as_str()).unwrap_or("");
+        if id_str == Some(id) || table_kind == kind {
             found_idx = Some(idx);
             break;
         }
@@ -391,10 +421,10 @@ pub fn upsert_local_models(doc: &mut DocumentMut, names: &[String], enabled: boo
         arr.get_mut(idx).unwrap()
     } else {
         let mut table = Table::new();
-        table.insert("id", Item::Value(Value::from("syntrop-local")));
-        table.insert("name", Item::Value(Value::from("Syntrop Local Inferenced Broker")));
-        table.insert("kind", Item::Value(Value::from("varlink")));
-        table.insert("base_url", Item::Value(Value::from(INFERENCED_SOCKET)));
+        table.insert("id", Item::Value(Value::from(id)));
+        table.insert("name", Item::Value(Value::from(name)));
+        table.insert("kind", Item::Value(Value::from(kind)));
+        table.insert("base_url", Item::Value(Value::from(base_url)));
         table.insert("tier", Item::Value(Value::from("fast")));
         table.insert("weight", Item::Value(Value::from(1.3)));
         table.insert("enabled", Item::Value(Value::from(enabled)));
@@ -439,6 +469,52 @@ fn set_models_array(table: &mut Table, models: &[String]) {
         arr.push(m.as_str());
     }
     table.insert("models", Item::Value(Value::Array(arr)));
+}
+
+/// Real GGUF model stems in one directory (non-recursive). Stubs and
+/// sidecar files (tokenizers, partial downloads) never qualify.
+fn scan_gguf_models(dir: &Path) -> Vec<String> {
+    let mut files = Vec::new();
+    if let Ok(rd) = fs::read_dir(dir) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            let is_gguf = path.extension().and_then(|x| x.to_str()) == Some("gguf");
+            let is_real = entry
+                .metadata()
+                .map(|m| m.len() > MIN_REAL_MODEL_BYTES)
+                .unwrap_or(false);
+            if is_gguf && is_real {
+                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                    // Vision projectors ride along with chat models; they
+                    // are not generatable models themselves.
+                    if !stem.starts_with("mmproj") {
+                        files.push(stem.to_string());
+                    }
+                }
+            }
+        }
+    }
+    files
+}
+
+/// Release every model name a provider claims, leaving the row itself.
+/// Used when names move to the engine that actually serves them.
+fn clear_provider_models(doc: &mut DocumentMut, id: &str) {
+    let Some(arr) = doc
+        .get_mut("providers")
+        .and_then(|p| p.as_array_of_tables_mut())
+    else {
+        return;
+    };
+    for table in arr.iter_mut() {
+        let id_str = table
+            .get("id")
+            .and_then(|i| i.as_str())
+            .or_else(|| table.get("name").and_then(|n| n.as_str()));
+        if id_str == Some(id) {
+            table.insert("models", Item::Value(Value::Array(Array::new())));
+        }
+    }
 }
 
 /// OpenAI shape: {"data": [{"id": ...}]}.
@@ -697,38 +773,29 @@ async fn autodetect_local(
             println!("  {:<16} OFF · nothing on port 11434", "ollama".bold());
         }
     }
-    let mut files: Vec<String> = Vec::new();
-    if let Ok(rd) = fs::read_dir(models_dir) {
-        for entry in rd.flatten() {
-            let path = entry.path();
-            let is_gguf = path.extension().and_then(|x| x.to_str()) == Some("gguf");
-            let is_real = entry
-                .metadata()
-                .map(|m| m.len() > MIN_REAL_MODEL_BYTES)
-                .unwrap_or(false);
-            if is_gguf && is_real {
-                if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    files.push(stem.to_string());
-                }
-            }
-        }
-    }
+    let mut files = scan_gguf_models(models_dir);
+    files.extend(scan_gguf_models(&models_dir.join("gguf")));
+    files.sort();
+    files.dedup();
     if files.is_empty() {
         println!("  {:<16} none in {}", "model files".bold(), models_dir.display());
     } else {
-        let alive = Path::new(INFERENCED_SOCKET).exists();
-        upsert_local_models(doc, &files, alive);
+        let alive = Path::new(RUNTIMED_SOCKET).exists();
+        upsert_runtimed_models(doc, &files, alive);
+        // GGUF files belong to the real engine. The legacy broker entry
+        // cannot serve them, so release any names it still claims.
+        clear_provider_models(doc, "syntrop-local");
         if alive {
             println!("  {:<16} LIVE · {} file(s)", "model files".bold(), files.len());
             report.push((
-                "syntrop-local".to_string(),
+                "runtimed-local".to_string(),
                 format!("LIVE · {} file(s)", files.len()),
             ));
         } else {
-            println!("  {:<16} OFF · broker not running", "model files".bold());
+            println!("  {:<16} OFF · engine not running", "model files".bold());
             report.push((
-                "syntrop-local".to_string(),
-                "OFF · broker not running".to_string(),
+                "runtimed-local".to_string(),
+                "OFF · engine not running".to_string(),
             ));
         }
         found_any = true;
@@ -795,6 +862,25 @@ pub fn set_tier_default(doc: &mut DocumentMut, tier: &str, model: &str) {
         tiers[tier] = Item::Table(Table::new());
     }
     tiers[tier]["default_model"] = Item::Value(Value::from(model));
+}
+
+/// Non-interactive default: the owned engine's first live model wins;
+/// otherwise the first live model. Prints what it chose.
+fn auto_default_model(doc: &mut DocumentMut) {
+    let options = live_models(doc);
+    if options.is_empty() {
+        println!("  no verified models; skipping");
+        return;
+    }
+    let pick = options
+        .iter()
+        .find(|(prov, _)| prov == "runtimed-local")
+        .or(options.first())
+        .map(|(_, name)| name.clone())
+        .unwrap();
+    set_tier_default(doc, "fast", &pick);
+    set_tier_default(doc, "hard", &pick);
+    println!("  default → {} (fast + hard)", pick.bold());
 }
 
 fn pick_default_model(doc: &mut DocumentMut) {
@@ -915,15 +1001,75 @@ mod tests {
     }
 
     #[test]
-    fn test_upsert_local_models() {
+    fn test_upsert_runtimed_models() {
         let mut doc = DocumentMut::new();
         doc["providers"] = Item::ArrayOfTables(ArrayOfTables::new());
-        upsert_local_models(&mut doc, &["m1".to_string()], true);
-        upsert_local_models(&mut doc, &["m1".to_string(), "m2".to_string()], true);
+        upsert_runtimed_models(&mut doc, &["m1".to_string()], true);
+        upsert_runtimed_models(&mut doc, &["m1".to_string(), "m2".to_string()], true);
         let s = doc.to_string();
         assert_eq!(s.matches("\"m1\"").count(), 1);
         assert!(s.contains("\"m2\""));
-        assert!(s.contains("id = \"syntrop-local\""));
+        assert!(s.contains("id = \"runtimed-local\""));
+        assert!(s.contains("kind = \"runtimed\""));
+        assert!(s.contains("/run/syntrop/io.syntrop.Runtime1"));
+    }
+
+    #[test]
+    fn test_clear_provider_models_releases_names() {
+        let mut doc = DocumentMut::new();
+        doc["providers"] = Item::ArrayOfTables(ArrayOfTables::new());
+        upsert_runtimed_models(&mut doc, &["m1".to_string()], true);
+        // Legacy broker row holding a stale claim.
+        let arr = doc["providers"].as_array_of_tables_mut().unwrap();
+        let mut legacy = Table::new();
+        legacy.insert("id", Item::Value(Value::from("syntrop-local")));
+        set_models_array(&mut legacy, &["m1".to_string()]);
+        arr.push(legacy);
+        clear_provider_models(&mut doc, "syntrop-local");
+        let s = doc.to_string();
+        // m1 survives exactly once: under the engine, not the broker.
+        assert_eq!(s.matches("\"m1\"").count(), 1);
+        assert!(s.contains("id = \"runtimed-local\""));
+    }
+
+    #[test]
+    fn test_auto_default_prefers_engine() {
+        let mut doc = DocumentMut::new();
+        doc["providers"] = Item::ArrayOfTables(ArrayOfTables::new());
+        // Ollama first in file order; the engine must still win.
+        let arr = doc["providers"].as_array_of_tables_mut().unwrap();
+        let mut ollama = Table::new();
+        ollama.insert("id", Item::Value(Value::from("local-ollama")));
+        ollama.insert("enabled", Item::Value(Value::from(true)));
+        set_models_array(&mut ollama, &["qwen".to_string()]);
+        arr.push(ollama);
+        upsert_runtimed_models(&mut doc, &["gemma".to_string()], true);
+        auto_default_model(&mut doc);
+        let s = doc.to_string();
+        assert!(s.contains("default_model = \"gemma\""));
+        assert!(!s.contains("default_model = \"qwen\""));
+    }
+
+    #[test]
+    fn test_scan_gguf_models_skips_small_and_sidecars() {
+        let dir = std::env::temp_dir().join(format!(
+            "routerd-scan-test-{}",
+            std::process::id()
+        ));
+        let gguf = dir.join("gguf");
+        std::fs::create_dir_all(&gguf).unwrap();
+        // Real file: big + .gguf. Sidecars must never qualify.
+        std::fs::write(dir.join("m.gguf"), vec![0u8; 1_000_001]).unwrap();
+        std::fs::write(dir.join("tiny.gguf"), vec![0u8; 10]).unwrap();
+        std::fs::write(dir.join("m.tokenizer.json"), vec![0u8; 2_000_000]).unwrap();
+        std::fs::write(dir.join("x.gguf.part"), vec![0u8; 2_000_000]).unwrap();
+        std::fs::write(dir.join("mmproj-X-F16.gguf"), vec![0u8; 2_000_000]).unwrap();
+        std::fs::write(gguf.join("n.gguf"), vec![0u8; 1_000_001]).unwrap();
+        let mut found = scan_gguf_models(&dir);
+        found.extend(scan_gguf_models(&gguf));
+        found.sort();
+        assert_eq!(found, vec!["m".to_string(), "n".to_string()]);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
