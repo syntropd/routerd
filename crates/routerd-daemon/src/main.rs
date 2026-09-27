@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
         RouterConfig::load_from_file(&cli.config)
             .with_context(|| format!("Failed to load configuration file {:?}", cli.config))?
     } else {
-        let default_toml = include_str!("../../../systemd/routerd.toml");
+        let default_toml = routerd_core::DEFAULT_ROUTERD_TOML;
         RouterConfig::load_from_str(default_toml).unwrap_or_default()
     };
 

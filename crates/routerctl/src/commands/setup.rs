@@ -136,7 +136,7 @@ pub(crate) fn load_or_init_config(path: &Path) -> Result<DocumentMut> {
         })?;
         Ok(doc)
     } else {
-        let template = include_str!("../../../../systemd/routerd.toml");
+        let template = routerd_core::DEFAULT_ROUTERD_TOML;
         let doc = template.parse::<DocumentMut>().map_err(|e| {
             anyhow!("Failed to parse default template configuration: {}", e)
         })?;
@@ -928,7 +928,7 @@ mod tests {
 
     #[test]
     fn test_minimax_mistral_custom_config_edit() {
-        let template = include_str!("../../../../systemd/routerd.toml");
+        let template = routerd_core::DEFAULT_ROUTERD_TOML;
         let mut doc = template.parse::<DocumentMut>().unwrap();
 
         // MiniMax enable with key and verified models

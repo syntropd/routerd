@@ -6,7 +6,7 @@ use tempfile::NamedTempFile;
 
 #[test]
 fn test_template_config_parsing() {
-    let template = include_str!("../../systemd/routerd.toml");
+    let template = include_str!("../../crates/routerd-core/systemd/routerd.toml");
     let cfg = RouterConfig::load_from_str(template).expect("Default routerd.toml must parse cleanly");
 
     assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:32768");

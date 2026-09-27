@@ -19,3 +19,8 @@ pub use models::{
 pub use router::{DaemonStatusInfo, ProviderStatusInfo, RouterEngine};
 pub use scoring::{CandidateProvider, RequestProfile, ScoredCandidate, ScoringEngine};
 pub use telemetry::{PressureLevel, PressureMetrics, TelemetryClient};
+
+/// Default router configuration template. Lives in this crate (not the
+/// repo root) so published packages stay self-contained: `cargo package`
+/// only ships files under the package directory.
+pub const DEFAULT_ROUTERD_TOML: &str = include_str!("../systemd/routerd.toml");
