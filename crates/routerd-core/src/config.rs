@@ -251,6 +251,40 @@ impl RouterConfig {
     }
 }
 
+/// Local-only rule, shared by setup and the daemon. Ollama (including your
+/// own LAN nodes) and the local varlink broker are always local. Anything
+/// else must live on loopback; cloud APIs are refused.
+pub fn is_local_provider(kind: &str, base_url: &str) -> bool {
+    match kind.to_ascii_lowercase().as_str() {
+        "ollama" | "varlink" | "syntrop" => true,
+        _ => is_localhost_url(base_url),
+    }
+}
+
+/// True when the URL's host is loopback (localhost, 127/8, ::1) or the
+/// target is a local socket path rather than a URL at all.
+pub fn is_localhost_url(url: &str) -> bool {
+    if url.starts_with('/') {
+        return true;
+    }
+    let after_scheme = url.split("://").nth(1).unwrap_or(url);
+    let authority = after_scheme
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("");
+    let bare = match host.strip_prefix('[') {
+        Some(bracketed) => bracketed.split(']').next().unwrap_or(""),
+        None => host.split(':').next().unwrap_or(""),
+    };
+    if bare.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    bare.parse::<std::net::IpAddr>()
+        .map(|ip| ip.is_loopback())
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -294,6 +328,22 @@ mod tests {
         "#;
         let cfg = RouterConfig::load_from_str(toml_str).unwrap();
         assert_eq!(cfg.thresholds.min_tokens_per_second, 25.5);
+    }
+
+    #[test]
+    fn test_local_provider_rule() {
+        // Ollama anywhere (your hardware), varlink broker, localhost APIs.
+        assert!(is_local_provider("ollama", "http://192.168.1.100:11434"));
+        assert!(is_local_provider("ollama", "http://127.0.0.1:11434/v1"));
+        assert!(is_local_provider("varlink", "/run/syntrop/io.syntrop.Inference1"));
+        assert!(is_local_provider("openai", "http://127.0.0.1:8000/v1"));
+        assert!(is_local_provider("openai", "http://localhost:8000/v1"));
+        assert!(is_local_provider("openai", "http://[::1]:8000/v1"));
+        // Cloud APIs refused even for openai-kind entries.
+        assert!(!is_local_provider("openai", "https://api.groq.com/openai/v1"));
+        assert!(!is_local_provider("minimax", "https://api.minimaxi.chat/v1"));
+        assert!(!is_local_provider("openai", "https://127.0.0.1.evil.com/v1"));
+        assert!(!is_local_provider("", ""));
     }
 
     #[test]

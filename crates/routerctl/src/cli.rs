@@ -4,7 +4,7 @@ use std::path::PathBuf;
 #[derive(Parser, Debug)]
 #[command(name = "routerctl")]
 #[command(author = "Syntropd Authors")]
-#[command(version = "0.3.1")]
+#[command(version = "0.3.2")]
 #[command(about = "Operator control CLI for syntrop-routerd")]
 pub struct Cli {
     #[arg(short, long, default_value = "/run/syntrop/io.syntrop.Router1", global = true)]

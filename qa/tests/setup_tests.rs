@@ -68,8 +68,8 @@ fn run_default(cfg: &PathBuf, model: Option<&str>) -> (bool, String) {
 #[test]
 fn test_setup_skip_all_disables() {
     let (_dir, cfg, models) = temp_paths("skip");
-    // minimax skip, mistral skip, custom no
-    let (ok, text) = run_setup(&cfg, &models, "\n\nn\n");
+    // custom no, default EOF-skips
+    let (ok, text) = run_setup(&cfg, &models, "n\n");
     assert!(ok, "setup must exit 0 on skips. output:\n{}", text);
     let content = std::fs::read_to_string(&cfg).unwrap();
     let doc: toml::Value = content.parse().unwrap();
@@ -79,7 +79,7 @@ fn test_setup_skip_all_disables() {
         .expect("providers array present");
     assert!(providers
         .iter()
-        .any(|t| t.get("id").and_then(|v| v.as_str()) == Some("minimax")));
+        .any(|t| t.get("id").and_then(|v| v.as_str()) == Some("ollama-lan-1")));
     for t in providers {
         let id = t.get("id").and_then(|v| v.as_str()).unwrap_or("?");
         let enabled = t.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -119,8 +119,8 @@ fn test_setup_enumerates_from_live_server() {
         }
     });
     let (_dir, cfg, models) = temp_paths("live");
-    // minimax skip, mistral skip, custom yes + id/name/url/empty-key
-    let input = format!("\n\ny\nmockprov\nMock\nhttp://127.0.0.1:{}\n", port);
+    // custom yes + id/name/url/empty-key, default EOF-skips
+    let input = format!("y\nmockprov\nMock\nhttp://127.0.0.1:{}\n\n", port);
     let (ok, text) = run_setup(&cfg, &models, &input);
     assert!(ok, "setup must exit 0. output:\n{}", text);
     let content = std::fs::read_to_string(&cfg).unwrap();
@@ -133,6 +133,62 @@ fn test_setup_enumerates_from_live_server() {
     assert!(content.contains("id = \"mockprov\""));
     assert!(text.contains("LIVE"));
     server.join().unwrap();
+}
+
+/// Pre-existing cloud entries are switched off and their keys stripped,
+/// without ever being pinged. Local entries are unaffected.
+#[test]
+fn test_setup_switches_off_cloud() {
+    let (_dir, cfg, models) = temp_paths("cloudoff");
+    std::fs::write(
+        &cfg,
+        r#"
+[[providers]]
+id = "minimax"
+kind = "minimax"
+base_url = "https://api.minimaxi.chat/v1"
+api_key = "sk-live-key-must-go"
+enabled = true
+models = ["MiniMax-M3"]
+
+[[providers]]
+id = "lan-one"
+kind = "ollama"
+base_url = "http://127.0.0.1:9"
+enabled = true
+models = ["local-still-probed"]
+"#,
+    )
+    .unwrap();
+    let (ok, text) = run_setup(&cfg, &models, "n\n");
+    assert!(ok, "setup must exit 0. output:\n{}", text);
+    assert_eq!(
+        text.matches("external (local-only mode)").count(),
+        2,
+        "audit + summary lines for the one cloud entry:\n{}",
+        text
+    );
+    let content = std::fs::read_to_string(&cfg).unwrap();
+    assert!(!content.contains("sk-live-key-must-go"), "cloud key stripped:\n{}", content);
+    let doc: toml::Value = content.parse().unwrap();
+    let providers = doc.get("providers").and_then(|p| p.as_array()).unwrap();
+    let mm = providers
+        .iter()
+        .find(|t| t.get("id").and_then(|v| v.as_str()) == Some("minimax"))
+        .expect("minimax entry preserved");
+    assert_eq!(mm.get("enabled").and_then(|v| v.as_bool()), Some(false));
+    assert!(mm.get("api_key").is_none());
+}
+
+/// Custom providers with external URLs are refused, never saved.
+#[test]
+fn test_setup_refuses_external_custom() {
+    let (_dir, cfg, models) = temp_paths("refuse");
+    let (ok, text) = run_setup(&cfg, &models, "y\nevil\nEvil\nhttps://api.evil.com/v1\n");
+    assert!(ok, "setup must exit 0. output:\n{}", text);
+    assert!(text.contains("local-only mode"), "output:\n{}", text);
+    let content = std::fs::read_to_string(&cfg).unwrap();
+    assert!(!content.contains("evil"), "refused entry not saved:\n{}", content);
 }
 
 /// `routerctl default` pins a connected model, shows it, rejects the rest.
@@ -157,7 +213,7 @@ fn test_default_command_roundtrip() {
         }
     });
     let (_dir, cfg, models) = temp_paths("defcmd");
-    let input = format!("\n\ny\nmockprov\nMock\nhttp://127.0.0.1:{}\n", port);
+    let input = format!("y\nmockprov\nMock\nhttp://127.0.0.1:{}\n\n", port);
     let (ok, text) = run_setup(&cfg, &models, &input);
     assert!(ok, "setup must exit 0. output:\n{}", text);
 

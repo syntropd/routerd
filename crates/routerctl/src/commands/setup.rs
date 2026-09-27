@@ -2,6 +2,7 @@ use crate::cli::SetupArgs;
 use anyhow::{anyhow, Result};
 use colored::Colorize;
 use futures::future::join_all;
+use routerd_core::config::{is_local_provider, is_localhost_url};
 use routerd_core::credentials::resolve_credential;
 use std::fs;
 use std::io::{self, Write};
@@ -17,7 +18,10 @@ const MIN_REAL_MODEL_BYTES: u64 = 1_000_000;
 const LOCAL_OLLAMA_URL: &str = "http://127.0.0.1:11434/v1";
 /// Socket proving the local inference broker is alive.
 const INFERENCED_SOCKET: &str = "/run/syntrop/io.syntrop.Inference1";
+// Dormant in local-only mode; kept (and unit-tested) for cloud restore.
+#[allow(dead_code)]
 const MINIMAX_BASE_URL: &str = "https://api.minimaxi.chat/v1";
+#[allow(dead_code)]
 const MISTRAL_BASE_URL: &str = "https://api.mistral.ai/v1";
 
 // Setup registers only servers and model files it verifies live.
@@ -36,7 +40,7 @@ fn prompt_line(prompt: &str) -> String {
 }
 
 pub async fn run_setup(args: &SetupArgs) -> Result<()> {
-    println!("{}", "routerctl setup — ping everything, enable only what answers".bold());
+    println!("{}", "routerctl setup — local models only".bold());
     println!("config {} · models {}", args.config.display(), args.models_dir.display());
     println!();
 
@@ -50,25 +54,6 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
 
     println!("{}", "local".cyan());
     autodetect_local(&mut doc, &args.models_dir, &mut report).await;
-    println!();
-
-    println!("{}", "keys".cyan());
-    run_key_step(
-        &mut doc,
-        &mut report,
-        "minimax",
-        MINIMAX_BASE_URL,
-        configure_minimax,
-    )
-    .await;
-    run_key_step(
-        &mut doc,
-        &mut report,
-        "mistral",
-        MISTRAL_BASE_URL,
-        configure_mistral,
-    )
-    .await;
     println!();
 
     println!("{}", "custom".cyan());
@@ -90,41 +75,10 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
     Ok(())
 }
 
-/// One hosted-key step: prompt, ping /models, store only a live answer.
-async fn run_key_step(
-    doc: &mut DocumentMut,
-    report: &mut Vec<(String, String)>,
-    id: &str,
-    base_url: &str,
-    configure: fn(&mut DocumentMut, Option<String>, Option<Vec<String>>),
-) {
-    let key = prompt_line(&format!("{} key [skip]: ", id));
-    if key.is_empty() {
-        configure(doc, None, None);
-        report.push((id.to_string(), "OFF · skipped".to_string()));
-        println!("  {} OFF · skipped", id.bold());
-        return;
-    }
-    print!("  {} pinging... ", id.bold());
-    let _ = io::stdout().flush();
-    match fetch_model_ids(base_url, Some(key.as_str())).await {
-        Ok(ids) => {
-            println!("{}", format!("LIVE · {} model(s)", ids.len()).green().bold());
-            configure(doc, Some(key), Some(ids.clone()));
-            report.push((id.to_string(), format!("LIVE · {} model(s)", ids.len())));
-        }
-        Err(e) => {
-            println!("{} {}", "OFF ·".red().bold(), e);
-            configure(doc, None, None);
-            report.push((id.to_string(), format!("OFF · {}", e)));
-        }
-    }
-}
-
-/// One custom-provider step: prompt, ping, store only a live answer (or an
-/// explicit save-anyway, which stays OFF).
+/// One custom-provider step: localhost only. Prompt, ping, store only a
+/// live answer (or an explicit save-anyway, which stays OFF).
 async fn run_custom_step(doc: &mut DocumentMut, report: &mut Vec<(String, String)>) {
-    let add_custom = prompt_line("add a custom provider (vLLM, OpenRouter...)? [y/N]: ");
+    let add_custom = prompt_line("add a custom local provider (vLLM, llama.cpp...)? [y/N]: ");
     if !(add_custom.eq_ignore_ascii_case("y") || add_custom.eq_ignore_ascii_case("yes")) {
         return;
     }
@@ -132,12 +86,17 @@ async fn run_custom_step(doc: &mut DocumentMut, report: &mut Vec<(String, String
     let p_id = if p_id.is_empty() { "custom-provider".to_string() } else { p_id };
     let p_name = prompt_line("  name [same as id]: ");
     let p_name = if p_name.is_empty() { p_id.clone() } else { p_name };
-    let base_url = prompt_line("  base URL [https://api.openai.com/v1]: ");
+    let base_url = prompt_line("  base URL [http://127.0.0.1:8000/v1]: ");
     let base_url = if base_url.is_empty() {
-        "https://api.openai.com/v1".to_string()
+        "http://127.0.0.1:8000/v1".to_string()
     } else {
         base_url.trim_end_matches('/').to_string()
     };
+    if !is_localhost_url(&base_url) {
+        println!("  {} external URLs are disabled in local-only mode", "OFF ·".red().bold());
+        report.push((p_id, "OFF · external (local-only mode)".to_string()));
+        return;
+    }
     let p_key = prompt_line("  key [none]: ");
     let key_opt = if p_key.is_empty() { None } else { Some(p_key.as_str()) };
     print!("  pinging... ");
@@ -235,6 +194,8 @@ pub fn ensure_thresholds_config(doc: &mut DocumentMut) {
     }
 }
 
+/// Dormant in local-only mode; kept for cloud restore.
+#[allow(dead_code)]
 pub fn configure_minimax(
     doc: &mut DocumentMut,
     api_key: Option<String>,
@@ -289,6 +250,8 @@ pub fn configure_minimax(
     }
 }
 
+/// Dormant in local-only mode; kept for cloud restore.
+#[allow(dead_code)]
 pub fn configure_mistral(
     doc: &mut DocumentMut,
     api_key: Option<String>,
@@ -629,7 +592,25 @@ async fn audit_existing_providers(doc: &mut DocumentMut, report: &mut Vec<(Strin
         println!("  nothing configured yet");
         return;
     }
-    let probes = entries.iter().map(|e| async move {
+    // Local-only mode: external entries are switched off and their keys
+    // stripped without ever being pinged. The entries stay in the file so
+    // restoring cloud later is just re-enabling them.
+    let (cloud, local): (Vec<AuditEntry>, Vec<AuditEntry>) = entries
+        .into_iter()
+        .partition(|e| !is_local_provider(&e.kind, &e.base_url));
+    for e in &cloud {
+        if let Some(table) = doc
+            .get_mut("providers")
+            .and_then(|p| p.as_array_of_tables_mut())
+            .and_then(|a| a.get_mut(e.idx))
+        {
+            table.insert("enabled", Item::Value(Value::from(false)));
+            table.remove("api_key");
+        }
+        println!("  {:<16} OFF · external (local-only mode)", e.id.bold());
+        report.push((e.id.clone(), "OFF · external (local-only mode)".to_string()));
+    }
+    let probes = local.iter().map(|e| async move {
         if e.kind == "varlink" {
             if Path::new(&e.base_url).exists() {
                 (e.idx, e.id.clone(), Ok(Vec::new()))
@@ -960,7 +941,12 @@ mod tests {
         assert!(s.contains("unit-test-key-minimax"));
         assert!(s.contains("live-model-a"));
 
-        // Mistral disable
+        // Mistral enable then disable (dormant cloud path, kept tested)
+        configure_mistral(
+            &mut doc,
+            Some("unit-test-key-mistral".to_string()),
+            Some(vec!["m-live".to_string()]),
+        );
         configure_mistral(&mut doc, None, None);
         let s2 = doc.to_string();
         let doc2: DocumentMut = s2.parse().unwrap();

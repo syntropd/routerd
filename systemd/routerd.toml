@@ -29,141 +29,11 @@ cost_weight = 0.15
 capability_weight = 0.70
 # default_model: unset — scoring decides. Set via `routerctl default <model>`.
 
-# --- Provider Definitions ---
+# --- Provider Definitions (local-only) ---
+# Cloud providers were removed; the daemon refuses non-local entries.
+# Restore: re-add a [[providers]] block and re-run setup.
 
-# 1. MiniMax Cloud Provider
-[[providers]]
-id = "minimax"
-name = "MiniMax AI Cloud"
-kind = "minimax"
-base_url = "https://api.minimaxi.chat/v1"
-api_key = "cred:minimax_api_key"
-tier = "hard"
-weight = 1.0
-enabled = false
-timeout_ms = 30000
-
-[[providers.models]]
-name = "abab6.5s-chat"
-max_context_tokens = 245760
-cost_per_input_token = 0.000001
-cost_per_output_token = 0.000001
-avg_latency_ms = 350.0
-tokens_per_second = 80.0
-tier = "hard"
-
-# 2. Groq Cloud Provider (High-speed LPU)
-[[providers]]
-id = "groq"
-name = "Groq LPU Inference"
-kind = "openai"
-base_url = "https://api.groq.com/openai/v1"
-api_key = "cred:groq_api_key"
-tier = "fast"
-weight = 1.2
-enabled = false
-timeout_ms = 15000
-
-[[providers.models]]
-name = "llama-3.3-70b-versatile"
-max_context_tokens = 128000
-cost_per_input_token = 0.00000059
-cost_per_output_token = 0.00000079
-avg_latency_ms = 120.0
-tokens_per_second = 280.0
-tier = "fast"
-
-[[providers.models]]
-name = "llama-3.1-8b-instant"
-max_context_tokens = 128000
-cost_per_input_token = 0.00000005
-cost_per_output_token = 0.00000008
-avg_latency_ms = 60.0
-tokens_per_second = 550.0
-tier = "fast"
-
-# 3. Google Gemini (OpenAI-compatible wire protocol)
-[[providers]]
-id = "gemini"
-name = "Google Gemini"
-kind = "openai"
-base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-api_key = "cred:gemini_api_key"
-tier = "fast"
-weight = 1.0
-enabled = false
-timeout_ms = 25000
-
-[[providers.models]]
-name = "gemini-1.5-flash"
-max_context_tokens = 1048576
-cost_per_input_token = 0.000000075
-cost_per_output_token = 0.0000003
-avg_latency_ms = 180.0
-tokens_per_second = 190.0
-tier = "fast"
-
-[[providers.models]]
-name = "gemini-1.5-pro"
-max_context_tokens = 2097152
-cost_per_input_token = 0.00000125
-cost_per_output_token = 0.000005
-avg_latency_ms = 450.0
-tokens_per_second = 70.0
-tier = "hard"
-
-# 4. Mistral AI
-[[providers]]
-id = "mistral"
-name = "Mistral AI Platform"
-kind = "openai"
-base_url = "https://api.mistral.ai/v1"
-api_key = "cred:mistral_api_key"
-tier = "hard"
-weight = 1.0
-enabled = false
-timeout_ms = 25000
-
-[[providers.models]]
-name = "mistral-large-latest"
-max_context_tokens = 128000
-cost_per_input_token = 0.000002
-cost_per_output_token = 0.000006
-avg_latency_ms = 300.0
-tokens_per_second = 90.0
-tier = "hard"
-
-[[providers.models]]
-name = "mistral-small-latest"
-max_context_tokens = 32768
-cost_per_input_token = 0.0000002
-cost_per_output_token = 0.0000006
-avg_latency_ms = 130.0
-tokens_per_second = 220.0
-tier = "fast"
-
-# 5. Devin / Cognition AI Adapter
-[[providers]]
-id = "devin"
-name = "Devin Reasoning Engine"
-kind = "openai"
-base_url = "https://api.devin.ai/v1"
-api_key = "cred:devin_api_key"
-tier = "hard"
-weight = 0.9
-enabled = false
-timeout_ms = 60000
-
-[[providers.models]]
-name = "devin-cognition-v1"
-max_context_tokens = 64000
-cost_per_input_token = 0.000003
-cost_per_output_token = 0.000015
-avg_latency_ms = 600.0
-tokens_per_second = 50.0
-tier = "hard"
-
-# 6. Remote LAN Ollama Node 1
+# 1. Remote LAN Ollama Node 1
 [[providers]]
 id = "ollama-lan-1"
 name = "Local LAN Inference Worker 1"
@@ -183,7 +53,7 @@ avg_latency_ms = 95.0
 tokens_per_second = 110.0
 tier = "fast"
 
-# 7. Remote LAN Ollama Node 2
+# 2. Remote LAN Ollama Node 2
 [[providers]]
 id = "ollama-lan-2"
 name = "Local LAN Inference Worker 2"
@@ -203,7 +73,7 @@ avg_latency_ms = 280.0
 tokens_per_second = 45.0
 tier = "hard"
 
-# 8. Local syntrop Varlink Bridge (Hardware Accelerated)
+# 3. Local syntrop Varlink Bridge (Hardware Accelerated)
 [[providers]]
 id = "syntrop-local"
 name = "Syntrop Local Inferenced Broker"

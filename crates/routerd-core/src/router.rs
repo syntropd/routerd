@@ -1,5 +1,5 @@
 use crate::adapters::{create_adapter, ByteStream, ProviderAdapter};
-use crate::config::{ProviderConfig, RouterConfig, ThresholdsConfig, TierConfig};
+use crate::config::{is_local_provider, ProviderConfig, RouterConfig, ThresholdsConfig, TierConfig};
 use crate::error::{Result, RouterError};
 use crate::models::{
     ChatCompletionRequest, ChatCompletionResponse, ModelItem, ModelListResponse,
@@ -89,6 +89,14 @@ impl RouterEngine {
         let mut entries = HashMap::new();
 
         for p in &config.providers {
+            // Local-only mode: external providers never load, even if enabled.
+            if !is_local_provider(&p.kind, &p.base_url) {
+                warn!(
+                    "Provider '{}' refused: external LLM APIs are disabled (local-only mode)",
+                    p.id
+                );
+                continue;
+            }
             let adapter = create_adapter(p);
             let stats = ProviderStats {
                 is_healthy: true,
@@ -464,7 +472,7 @@ impl RouterEngine {
 
         DaemonStatusInfo {
             status: "active".to_string(),
-            version: "0.3.1".to_string(),
+            version: "0.3.2".to_string(),
             uptime_seconds: self.start_time.elapsed().as_secs(),
             total_requests: self.total_requests.load(Ordering::Relaxed),
             active_requests: self.active_requests.load(Ordering::Relaxed),

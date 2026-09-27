@@ -12,17 +12,22 @@ fn test_template_config_parsing() {
     assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:32768");
     assert_eq!(cfg.daemon.varlink_socket, "/run/syntrop/io.syntrop.Router1");
     assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
-    assert_eq!(cfg.providers.len(), 8);
+    assert_eq!(cfg.providers.len(), 3);
 
     let provider_ids: Vec<&str> = cfg.providers.iter().map(|p| p.id.as_str()).collect();
-    assert!(provider_ids.contains(&"minimax"));
-    assert!(provider_ids.contains(&"groq"));
-    assert!(provider_ids.contains(&"gemini"));
-    assert!(provider_ids.contains(&"mistral"));
-    assert!(provider_ids.contains(&"devin"));
     assert!(provider_ids.contains(&"ollama-lan-1"));
     assert!(provider_ids.contains(&"ollama-lan-2"));
     assert!(provider_ids.contains(&"syntrop-local"));
+
+    // Template ships local-only and switched off; setup enables verified.
+    for p in &cfg.providers {
+        assert!(
+            routerd_core::config::is_local_provider(&p.kind, &p.base_url),
+            "{} must satisfy the local-only rule",
+            p.id
+        );
+        assert!(!p.enabled, "{} must ship disabled", p.id);
+    }
 
     assert!(cfg.tiers.contains_key("fast"));
     assert!(cfg.tiers.contains_key("hard"));
