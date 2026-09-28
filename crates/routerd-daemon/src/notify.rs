@@ -87,3 +87,27 @@ pub fn send_notification_to(socket_path: &str, state: &str) -> io::Result<usize>
         )
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn notify_address_accepts_abstract_and_paths() {
+        assert!(notify_address("@syntrop-test").is_some());
+        assert!(notify_address("/tmp/x.sock").is_some());
+        assert!(notify_address("").is_none());
+        assert!(notify_address("@").is_none());
+    }
+
+    #[test]
+    fn sanitize_value_strips_newlines() {
+        assert_eq!(sanitize_value("a\nb\rc"), "abc");
+    }
+
+    #[test]
+    fn oversize_notification_rejected() {
+        let big = "x".repeat(9 * 1024 * 1024);
+        assert!(send_notification(&big).is_err());
+    }
+}

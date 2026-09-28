@@ -155,3 +155,25 @@ pub struct SetupArgs {
     #[arg(long)]
     pub auto: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_parses_status_and_route() {
+        let cli = Cli::try_parse_from(["routerctl", "status"]).unwrap();
+        assert!(matches!(cli.command, Commands::Status));
+        assert!(!cli.json);
+        let cli =
+            Cli::try_parse_from(["routerctl", "--json", "route", "router:hard", "--tokens", "5"]).unwrap();
+        assert!(cli.json);
+        match cli.command {
+            Commands::Route(r) => {
+                assert_eq!(r.model, "router:hard");
+                assert_eq!(r.tokens, 5);
+            }
+            _ => panic!("expected route"),
+        }
+    }
+}

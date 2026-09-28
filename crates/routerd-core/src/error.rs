@@ -47,3 +47,22 @@ pub enum RouterError {
 }
 
 pub type Result<T> = std::result::Result<T, RouterError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_messages_name_the_culprit() {
+        assert!(RouterError::Config("bad toml".into()).to_string().contains("bad toml"));
+        let ctx = RouterError::ContextLimitExceeded {
+            model: "m".into(),
+            requested_tokens: 9,
+            context_limit: 8,
+        };
+        assert!(ctx.to_string().contains("'m'"));
+        let un = RouterError::ProviderUnavailable { provider: "p".into(), reason: "down".into() };
+        assert!(un.to_string().contains("'p'"));
+        assert!(RouterError::NoHealthyProvider("none".into()).to_string().contains("none"));
+    }
+}

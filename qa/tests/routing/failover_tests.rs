@@ -1,6 +1,7 @@
 use axum::extract::Json;
 use axum::routing::post;
 use axum::Router;
+use futures::StreamExt;
 use routerd_core::{
     ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ProviderConfig,
     ProviderModelConfig, RouterConfig, RouterEngine,
@@ -197,4 +198,56 @@ async fn test_provider_failover_exhaustion() {
 
     let result = engine.route_chat(&req).await;
     assert!(result.is_err(), "Expected error when all providers fail");
+}
+
+async fn mock_sse_completion(Json(_p): Json<Value>) -> impl axum::response::IntoResponse {
+    ([(axum::http::header::CONTENT_TYPE, "text/event-stream")],
+     "data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n\ndata: [DONE]\n\n")
+}
+
+#[tokio::test]
+async fn test_streaming_dispatch_collects_chunks() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let local_addr: SocketAddr = listener.local_addr().unwrap();
+    let app = Router::new().route("/v1/chat/completions", post(mock_sse_completion));
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap(); });
+    let mut config = RouterConfig::default();
+    config.providers.push(ProviderConfig {
+        id: "stream-healthy".to_string(),
+        name: "Stream Healthy Provider".to_string(),
+        kind: "openai".to_string(),
+        base_url: format!("http://{}/v1", local_addr),
+        api_key: None,
+        tier: "fast".to_string(),
+        weight: 1.0,
+        enabled: true,
+        timeout_ms: 2000,
+        models: vec![ProviderModelConfig {
+            name: "stream-model".to_string(),
+            max_context_tokens: 4096,
+            cost_per_input_token: 0.0, cost_per_output_token: 0.0,
+            avg_latency_ms: 50.0, tokens_per_second: 200.0,
+            tier: Some("fast".to_string()),
+        }],
+    });
+    let engine = Arc::new(RouterEngine::new(config));
+    let req = ChatCompletionRequest {
+        model: "router:fast".to_string(),
+        messages: vec![ChatMessage {
+            role: "user".to_string(),
+            content: serde_json::json!("Stream me"),
+            name: None,
+        }],
+        temperature: None, top_p: None,
+        max_tokens: Some(64), max_completion_tokens: None, stream: Some(true),
+        tier: Some("fast".to_string()),
+        extra: std::collections::HashMap::new(),
+    };
+    let (mut stream, scored) = engine.route_chat_stream(&req).await.unwrap();
+    assert_eq!(scored.provider_id, "stream-healthy");
+    let mut text = String::new();
+    while let Some(item) = stream.next().await {
+        text.push_str(std::str::from_utf8(&item.unwrap()).unwrap());
+    }
+    assert!(text.contains("Hel") && text.contains("lo"), "missing chunks: {text}");
 }

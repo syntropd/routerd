@@ -78,3 +78,18 @@ pub fn run_default(args: &DefaultArgs, json_output: bool) -> Result<()> {
     println!("default → {} (fast + hard)", canonical.bold());
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use toml_edit::{Item, Value};
+
+    #[test]
+    fn tier_default_reads_nested_key() {
+        let mut doc: DocumentMut = "x = 1".parse().unwrap();
+        assert_eq!(tier_default(&doc, "fast"), None);
+        doc["tiers"]["fast"]["default_model"] = Item::Value(Value::from("gemma"));
+        assert_eq!(tier_default(&doc, "fast"), Some("gemma".to_string()));
+        assert_eq!(tier_default(&doc, "hard"), None);
+    }
+}

@@ -38,7 +38,7 @@ impl MiniMaxAdapter {
         }
     }
 
-    fn endpoint(&self) -> String {
+    pub(crate) fn endpoint(&self) -> String {
         if self.base_url.ends_with("/chat/completions")
             || self.base_url.ends_with("/chatcompletion_v2")
         {
@@ -50,7 +50,7 @@ impl MiniMaxAdapter {
         }
     }
 
-    fn build_headers(&self) -> Result<HeaderMap> {
+    pub(crate) fn build_headers(&self) -> Result<HeaderMap> {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
@@ -65,7 +65,7 @@ impl MiniMaxAdapter {
         Ok(headers)
     }
 
-    fn build_payload(&self, target_model: &str, req: &ChatCompletionRequest, stream: bool) -> Value {
+    pub(crate) fn build_payload(&self, target_model: &str, req: &ChatCompletionRequest, stream: bool) -> Value {
         let mut body = json!({
             "model": target_model,
             "messages": req.messages,

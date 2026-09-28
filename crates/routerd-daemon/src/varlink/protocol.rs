@@ -80,3 +80,33 @@ pub fn make_invalid_parameter(param: &str) -> Vec<u8> {
     )
     .to_bytes()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_parses_with_or_without_nul() {
+        let req = VarlinkRequest {
+            method: "io.syntrop.Router1.GetStatus".to_string(),
+            parameters: Some(serde_json::json!({})),
+            more: None,
+            oneway: None,
+        };
+        let bytes = serde_json::to_vec(&req).unwrap();
+        assert_eq!(parse_request(&bytes).unwrap().method, req.method);
+        let mut nul = bytes.clone();
+        nul.push(0);
+        assert_eq!(parse_request(&nul).unwrap().method, req.method);
+        assert!(parse_request(b"nope").is_err());
+    }
+
+    #[test]
+    fn replies_carry_nul_terminator() {
+        let ok = VarlinkReply::ok(serde_json::json!({"a": 1}));
+        assert_eq!(*ok.to_bytes().last().unwrap(), 0);
+        let err = VarlinkReply::error("E", serde_json::json!({}));
+        assert_eq!(err.error.as_deref(), Some("E"));
+        assert_eq!(*make_method_not_found("m").last().unwrap(), 0);
+    }
+}

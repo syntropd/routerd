@@ -3,8 +3,12 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use routerd_core::{ProviderConfig, ProviderModelConfig, RouterConfig, RouterEngine};
 use routerd_daemon::gateway::create_gateway_router;
+use routerd_daemon::server::{
+    bind_standalone_tcp, bind_standalone_unix, serve_tcp_gateway, serve_unix_gateway,
+};
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
 
 fn test_router_engine() -> Arc<RouterEngine> {
@@ -104,4 +108,47 @@ async fn test_chat_completions_context_limit_exceeded_returns_bad_request() {
     let json: Value = serde_json::from_slice(&body).unwrap();
     let err_type = json.get("error").unwrap().get("type").unwrap().as_str().unwrap();
     assert_eq!(err_type, "context_limit_exceeded");
+}
+
+async fn raw_get(stream: &mut (impl AsyncWriteExt + AsyncReadExt + Unpin)) -> String {
+    stream
+        .write_all(b"GET /health HTTP/1.1\r\nhost: x\r\nconnection: close\r\n\r\n")
+        .await
+        .unwrap();
+    let mut out = Vec::new();
+    stream.read_to_end(&mut out).await.unwrap();
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+#[tokio::test]
+async fn test_standalone_servers_answer_health() {
+    let engine = test_router_engine();
+    let dir = std::env::temp_dir().join(format!("routerd-srv-test-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+
+    let unix_l = bind_standalone_unix(dir.join("router.sock")).unwrap();
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let srv = tokio::spawn(serve_unix_gateway(unix_l, create_gateway_router(engine.clone()), async {
+        let _ = rx.await;
+    }));
+    let mut unix_stream = tokio::net::UnixStream::connect(dir.join("router.sock")).await.unwrap();
+    let text = raw_get(&mut unix_stream).await;
+    assert!(text.contains("200"), "{text}");
+    assert!(text.contains("active"), "{text}");
+    let _ = tx.send(());
+    srv.await.unwrap().unwrap();
+
+    let tcp_l = bind_standalone_tcp("127.0.0.1:0").await.unwrap();
+    let addr = tcp_l.local_addr().unwrap();
+    let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    let srv = tokio::spawn(serve_tcp_gateway(tcp_l, create_gateway_router(engine), async {
+        let _ = rx.await;
+    }));
+    let mut tcp_stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    let text = raw_get(&mut tcp_stream).await;
+    assert!(text.contains("200"), "{text}");
+    let _ = tx.send(());
+    srv.await.unwrap().unwrap();
+    let _ = std::fs::remove_dir_all(&dir);
 }

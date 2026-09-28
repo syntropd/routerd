@@ -136,94 +136,61 @@ pub struct ChatCompletionChunk {
     pub choices: Vec<ChunkChoice>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelItem {
-    pub id: String,
-    pub object: String,
-    pub created: u64,
-    pub owned_by: String,
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ModelListResponse {
-    pub object: String,
-    pub data: Vec<ModelItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(from = "ProviderModelConfigHelper")]
-pub struct ProviderModelConfig {
-    pub name: String,
-    pub max_context_tokens: usize,
-    pub cost_per_input_token: f64,
-    pub cost_per_output_token: f64,
-    pub avg_latency_ms: f64,
-    pub tokens_per_second: f64,
-    pub tier: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
-enum ProviderModelConfigHelper {
-    Simple(String),
-    Detailed {
-        name: String,
-        #[serde(default = "default_max_context")]
-        max_context_tokens: usize,
-        #[serde(default)]
-        cost_per_input_token: f64,
-        #[serde(default)]
-        cost_per_output_token: f64,
-        #[serde(default = "default_latency")]
-        avg_latency_ms: f64,
-        #[serde(default = "default_tps")]
-        tokens_per_second: f64,
-        #[serde(default)]
-        tier: Option<String>,
-    },
-}
-
-impl From<ProviderModelConfigHelper> for ProviderModelConfig {
-    fn from(helper: ProviderModelConfigHelper) -> Self {
-        match helper {
-            ProviderModelConfigHelper::Simple(name) => Self {
-                name,
-                max_context_tokens: default_max_context(),
-                cost_per_input_token: 0.0,
-                cost_per_output_token: 0.0,
-                avg_latency_ms: default_latency(),
-                tokens_per_second: default_tps(),
-                tier: None,
-            },
-            ProviderModelConfigHelper::Detailed {
-                name,
-                max_context_tokens,
-                cost_per_input_token,
-                cost_per_output_token,
-                avg_latency_ms,
-                tokens_per_second,
-                tier,
-            } => Self {
-                name,
-                max_context_tokens,
-                cost_per_input_token,
-                cost_per_output_token,
-                avg_latency_ms,
-                tokens_per_second,
-                tier,
-            },
+    fn request(model: &str, tier: Option<&str>, max_tokens: Option<usize>) -> ChatCompletionRequest {
+        ChatCompletionRequest {
+            model: model.to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: serde_json::json!("hello"),
+                name: None,
+            }],
+            temperature: None,
+            top_p: None,
+            max_tokens,
+            max_completion_tokens: None,
+            stream: None,
+            tier: tier.map(str::to_string),
+            extra: HashMap::new(),
         }
     }
-}
 
-fn default_max_context() -> usize {
-    32768
-}
+    #[test]
+    fn content_as_str_reads_all_shapes() {
+        let plain = ChatMessage {
+            role: "r".to_string(),
+            content: serde_json::json!("hi"),
+            name: None,
+        };
+        assert_eq!(plain.content_as_str(), "hi");
+        let parts = ChatMessage {
+            role: "r".to_string(),
+            content: serde_json::json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]),
+            name: None,
+        };
+        assert_eq!(parts.content_as_str(), "a b ");
+    }
 
-fn default_latency() -> f64 {
-    200.0
-}
+    #[test]
+    fn requested_tier_prefers_field_then_alias() {
+        assert_eq!(request("x", Some("hard"), None).requested_tier(), Some("hard"));
+        assert_eq!(request("router:fast", None, None).requested_tier(), Some("fast"));
+        assert_eq!(request("hard", None, None).requested_tier(), Some("hard"));
+        assert_eq!(request("llama", None, None).requested_tier(), None);
+    }
 
-fn default_tps() -> f64 {
-    50.0
+    #[test]
+    fn token_estimates_floor_at_one_and_add_output() {
+        let mut req = request("router:fast", None, Some(100));
+        req.messages.clear();
+        assert_eq!(req.estimate_prompt_tokens(), 1);
+        assert_eq!(req.estimate_total_tokens(), 101);
+        let req = request("router:fast", None, None);
+        assert!(req.estimate_prompt_tokens() >= 1);
+        assert_eq!(req.estimate_total_tokens(), req.estimate_prompt_tokens() + 2048);
+    }
 }

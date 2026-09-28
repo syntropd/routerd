@@ -11,6 +11,10 @@ pub mod minimax;
 pub mod openai;
 pub mod runtimed;
 pub mod varlink_bridge;
+#[cfg(test)]
+mod minimax_tests;
+#[cfg(test)]
+mod openai_tests;
 
 pub use minimax::MiniMaxAdapter;
 pub use openai::OpenAICompatibleAdapter;

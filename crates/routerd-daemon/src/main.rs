@@ -230,3 +230,17 @@ async fn main() -> Result<()> {
     info!("routerd shutdown complete.");
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cli_parses_overrides() {
+        let cli = Cli::try_parse_from(["routerd", "--listen-tcp", "127.0.0.1:9999", "--verbose"])
+            .unwrap();
+        assert_eq!(cli.listen_tcp.as_deref(), Some("127.0.0.1:9999"));
+        assert!(cli.verbose);
+        assert_eq!(cli.config, PathBuf::from("/etc/syntrop/routerd.toml"));
+    }
+}

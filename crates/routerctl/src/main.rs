@@ -18,14 +18,14 @@ async fn main() -> Result<()> {
         }
         Commands::Providers(p_args) => match p_args.command {
             ProvidersCommands::List => {
-                commands::providers::run_list(&client, args.json).await?;
+                commands::catalog::providers::run_list(&client, args.json).await?;
             }
             ProvidersCommands::Test { provider_id } => {
-                commands::providers::run_test(&client, provider_id, args.json).await?;
+                commands::catalog::providers::run_test(&client, provider_id, args.json).await?;
             }
         },
         Commands::Models => {
-            commands::models::run_models(&client, args.json).await?;
+            commands::catalog::models::run_models(&client, args.json).await?;
         }
         Commands::Default(d_args) => {
             commands::default_model::run_default(&d_args, args.json)?;

@@ -38,7 +38,7 @@ impl OpenAICompatibleAdapter {
         }
     }
 
-    fn chat_endpoint(&self) -> String {
+    pub(crate) fn chat_endpoint(&self) -> String {
         if self.base_url.ends_with("/chat/completions") {
             self.base_url.clone()
         } else if self.base_url.ends_with("/v1")
@@ -52,7 +52,7 @@ impl OpenAICompatibleAdapter {
         }
     }
 
-    fn models_endpoint(&self) -> String {
+    pub(crate) fn models_endpoint(&self) -> String {
         if self.base_url.ends_with("/models") {
             self.base_url.clone()
         } else if self.base_url.ends_with("/v1")
@@ -81,7 +81,7 @@ impl OpenAICompatibleAdapter {
         Ok(headers)
     }
 
-    fn build_payload(&self, target_model: &str, req: &ChatCompletionRequest, stream: bool) -> Value {
+    pub(crate) fn build_payload(&self, target_model: &str, req: &ChatCompletionRequest, stream: bool) -> Value {
         let mut body = json!({
             "model": target_model,
             "messages": req.messages,
