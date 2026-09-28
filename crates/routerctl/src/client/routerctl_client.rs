@@ -74,10 +74,63 @@ impl RouterctlClient {
         }
 
         let resp: Value = serde_json::from_slice(&buf)?;
-        if let Some(err) = resp.get("error").and_then(|e| e.as_str()) {
-            return Err(anyhow!("Varlink error: {}", err));
+        if let Some(msg) = render_varlink_error(&resp) {
+            return Err(anyhow!("{msg}"));
         }
 
         Ok(resp.get("parameters").cloned().unwrap_or(Value::Null))
+    }
+}
+
+/// Human text for a Varlink error reply: the error name plus the
+/// server's `reason` when it sent one (that names the real cause,
+/// e.g. a CPU-only binary asked to run CUDA). `None` when the reply
+/// carries no error.
+fn render_varlink_error(resp: &Value) -> Option<String> {
+    let err = resp.get("error")?.as_str()?;
+    let detail = resp
+        .get("parameters")
+        .and_then(|p| p.get("reason"))
+        .and_then(|r| r.as_str())
+        .map(|r| format!(": {r}"))
+        .or_else(|| {
+            resp.get("parameters").and_then(|p| {
+                if p.is_null() {
+                    None
+                } else {
+                    Some(format!(": {p}"))
+                }
+            })
+        })
+        .unwrap_or_default();
+    Some(format!("Varlink error: {err}{detail}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_names_reason_when_server_sends_one() {
+        let resp = json!({
+            "error": "io.syntrop.Runtime1.GenerationFailed",
+            "parameters": {"reason": "Hardware compute allocation failure: cuda backend needs a --features cuda build"}
+        });
+        let msg = render_varlink_error(&resp).unwrap();
+        assert!(msg.contains("GenerationFailed"), "{msg}");
+        assert!(msg.contains("cuda backend needs a --features cuda build"), "{msg}");
+    }
+
+    #[test]
+    fn error_without_reason_still_names_error() {
+        let resp = json!({"error": "io.syntrop.Router1.Timeout"});
+        let msg = render_varlink_error(&resp).unwrap();
+        assert!(msg.contains("Timeout"), "{msg}");
+    }
+
+    #[test]
+    fn ok_reply_renders_no_error() {
+        let resp = json!({"parameters": {"answer": "hi"}});
+        assert!(render_varlink_error(&resp).is_none());
     }
 }
