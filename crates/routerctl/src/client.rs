@@ -39,10 +39,22 @@ impl RouterctlClient {
     }
 
     pub async fn varlink_call(&self, method: &str, params: Value) -> Result<Value> {
-        let stream = timeout(RPC_TIMEOUT, UnixStream::connect(&self.socket_path))
+        Self::varlink_call_path(&self.socket_path, method, params, RPC_TIMEOUT).await
+    }
+
+    /// One `\0`-framed Varlink call against any socket path, with an
+    /// explicit per-hop budget. Slow engine calls (model warmup) pass a
+    /// generous one; snappy router probes keep `RPC_TIMEOUT`.
+    pub async fn varlink_call_path(
+        socket_path: &PathBuf,
+        method: &str,
+        params: Value,
+        budget: Duration,
+    ) -> Result<Value> {
+        let stream = timeout(budget, UnixStream::connect(socket_path))
             .await
-            .map_err(|_| anyhow!("Connection to Varlink socket {:?} timed out", self.socket_path))?
-            .map_err(|e| anyhow!("Failed to connect to {:?}: {}", self.socket_path, e))?;
+            .map_err(|_| anyhow!("Connection to Varlink socket {:?} timed out", socket_path))?
+            .map_err(|e| anyhow!("Failed to connect to {:?}: {}", socket_path, e))?;
 
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
@@ -55,12 +67,12 @@ impl RouterctlClient {
         let mut req_bytes = serde_json::to_vec(&req)?;
         req_bytes.push(0);
 
-        timeout(RPC_TIMEOUT, writer.write_all(&req_bytes))
+        timeout(budget, writer.write_all(&req_bytes))
             .await
             .map_err(|_| anyhow!("Varlink write timed out"))??;
 
         let mut buf = Vec::with_capacity(1024);
-        timeout(RPC_TIMEOUT, reader.read_until(0, &mut buf))
+        timeout(budget, reader.read_until(0, &mut buf))
             .await
             .map_err(|_| anyhow!("Varlink read timed out"))??;
 
@@ -69,7 +81,7 @@ impl RouterctlClient {
         }
 
         if buf.is_empty() {
-            return Err(anyhow!("Empty reply from routerd"));
+            return Err(anyhow!("Empty reply"));
         }
 
         let resp: Value = serde_json::from_slice(&buf)?;

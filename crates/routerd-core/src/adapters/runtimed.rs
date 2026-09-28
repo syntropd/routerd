@@ -25,11 +25,17 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
 use uuid::Uuid;
 
+/// Cold model loads (gigabytes off disk) plus CPU decoding can take
+/// minutes. Completions always get at least this long, no matter how
+/// snappy the configured per-hop timeout is.
+const MIN_GENERATE_TIMEOUT: Duration = Duration::from_secs(300);
+
 pub struct RuntimedAdapter {
     id: String,
     socket_path: PathBuf,
     configured_models: Vec<String>,
     timeout: Duration,
+    generate_timeout: Duration,
 }
 
 impl RuntimedAdapter {
@@ -39,11 +45,13 @@ impl RuntimedAdapter {
         } else {
             &cfg.base_url
         };
+        let hop = Duration::from_millis(cfg.timeout_ms.max(1000));
         Self {
             id: cfg.id.clone(),
             socket_path: PathBuf::from(p),
             configured_models: cfg.models.iter().map(|m| m.name.clone()).collect(),
-            timeout: Duration::from_millis(cfg.timeout_ms.max(1000)),
+            timeout: hop,
+            generate_timeout: hop.max(MIN_GENERATE_TIMEOUT),
         }
     }
 
@@ -57,6 +65,17 @@ impl RuntimedAdapter {
 
     /// One Varlink call: connect, send, read the single `\0`-framed reply.
     async fn call(&self, method: &str, parameters: Value) -> Result<Value> {
+        self.call_with_timeout(method, parameters, self.timeout).await
+    }
+
+    /// Same call with an explicit budget. Completions pass the generous
+    /// generate timeout; cheap status probes keep the snappy one.
+    async fn call_with_timeout(
+        &self,
+        method: &str,
+        parameters: Value,
+        budget: Duration,
+    ) -> Result<Value> {
         let mut stream = timeout(self.timeout, UnixStream::connect(&self.socket_path))
             .await
             .map_err(|_| RouterError::Timeout("runtimed connection timed out".into()))?
@@ -77,7 +96,7 @@ impl RuntimedAdapter {
         let mut buf = Vec::with_capacity(4096);
         let mut chunk = [0u8; 1024];
         loop {
-            let n = timeout(self.timeout, stream.read(&mut chunk))
+            let n = timeout(budget, stream.read(&mut chunk))
                 .await
                 .map_err(|_| RouterError::Timeout("runtimed read timed out".into()))?
                 .map_err(RouterError::Io)?;
@@ -124,7 +143,9 @@ impl ProviderAdapter for RuntimedAdapter {
             "seed": 0,
             "image": Value::Null,
         });
-        let parameters = self.call("io.syntrop.Runtime1.Generate", params).await?;
+        let parameters = self
+            .call_with_timeout("io.syntrop.Runtime1.Generate", params, self.generate_timeout)
+            .await?;
         let result = parameters.get("result").cloned().unwrap_or(Value::Null);
         let text = result.get("text").and_then(|t| t.as_str()).unwrap_or("");
         let prompt_tok = result

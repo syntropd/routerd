@@ -1,4 +1,5 @@
 use crate::cli::SetupArgs;
+use crate::client::RouterctlClient;
 use anyhow::{anyhow, Result};
 use colored::Colorize;
 use futures::future::join_all;
@@ -6,12 +7,14 @@ use routerd_core::config::{is_local_provider, is_localhost_url};
 use routerd_core::credentials::resolve_credential;
 use std::fs;
 use std::io::{self, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value};
 
 /// Timeout for a single provider probe during setup.
 const PROBE_TIMEOUT_SECS: u64 = 5;
+/// Engine warmup budget: a cold multi-GB load plus one token.
+const WARMUP_TIMEOUT: Duration = Duration::from_secs(600);
 /// Files smaller than this are stubs, not models.
 const MIN_REAL_MODEL_BYTES: u64 = 1_000_000;
 /// Socket proving the owned runtimed engine is alive.
@@ -72,6 +75,10 @@ pub async fn run_setup(args: &SetupArgs) -> Result<()> {
 
     save_config(&args.config, &doc)?;
     println!("saved {}", args.config.display().to_string().bold());
+    println!();
+
+    println!("{}", "warming".cyan());
+    warmup_engine(&mut doc, &mut report).await;
 
     if !args.no_reload {
         reload_service();
@@ -426,7 +433,7 @@ fn upsert_provider_models(
         table.insert("tier", Item::Value(Value::from("fast")));
         table.insert("weight", Item::Value(Value::from(1.3)));
         table.insert("enabled", Item::Value(Value::from(enabled)));
-        table.insert("timeout_ms", Item::Value(Value::from(10000)));
+        table.insert("timeout_ms", Item::Value(Value::from(300000)));
         arr.push(table);
         let last_idx = arr.len() - 1;
         arr.get_mut(last_idx).unwrap()
@@ -578,6 +585,15 @@ struct AuditEntry {
     key_spec: Option<String>,
 }
 
+/// Provider kinds whose base URL is a local socket path, not HTTP.
+/// These get a socket-existence probe instead of an HTTP ping.
+fn is_socket_kind(kind: &str) -> bool {
+    matches!(
+        kind.to_ascii_lowercase().as_str(),
+        "varlink" | "syntrop" | "runtimed"
+    )
+}
+
 /// Ping every enabled provider already in the document, in parallel.
 /// Dead entries get switched off; live ones get their model lists refreshed
 /// from the answers. Never prompts.
@@ -639,7 +655,7 @@ async fn audit_existing_providers(doc: &mut DocumentMut, report: &mut Vec<(Strin
         report.push((e.id.clone(), "OFF · external (local-only mode)".to_string()));
     }
     let probes = local.iter().map(|e| async move {
-        if e.kind == "varlink" {
+        if is_socket_kind(&e.kind) {
             if Path::new(&e.base_url).exists() {
                 (e.idx, e.id.clone(), Ok(Vec::new()))
             } else {
@@ -832,6 +848,85 @@ fn pick_default_model(doc: &mut DocumentMut) {
     }
 }
 
+/// First model name from a provider table (string list or name tables).
+fn first_model_name(table: &Table) -> Option<String> {
+    let models = table.get("models")?;
+    if let Some(arr) = models.as_array() {
+        return arr.iter().filter_map(|v| v.as_str()).map(str::to_string).next();
+    }
+    if let Some(tables) = models.as_array_of_tables() {
+        return tables
+            .iter()
+            .filter_map(|t| t.get("name")?.as_str())
+            .map(str::to_string)
+            .next();
+    }
+    None
+}
+
+/// The owned engine's (socket, model) when one is registered, enabled,
+/// and present on disk.
+fn warmup_target(doc: &DocumentMut) -> Option<(PathBuf, String)> {
+    let arr = doc.get("providers")?.as_array_of_tables()?;
+    for table in arr.iter() {
+        let kind = table.get("kind").and_then(|k| k.as_str()).unwrap_or("");
+        if !kind.eq_ignore_ascii_case("runtimed") {
+            continue;
+        }
+        if table.get("enabled").and_then(|v| v.as_bool()) == Some(false) {
+            continue;
+        }
+        let raw = table.get("base_url").and_then(|u| u.as_str())?;
+        let socket = PathBuf::from(raw.strip_prefix("varlink:").unwrap_or(raw));
+        if !socket.exists() {
+            continue;
+        }
+        return Some((socket, first_model_name(table)?));
+    }
+    None
+}
+
+/// One single-token Generate against the engine so its weights are
+/// resident before the first real question. Best-effort: a failure
+/// warns and setup still succeeds (asks just pay the load then).
+async fn warmup_engine(doc: &mut DocumentMut, report: &mut Vec<(String, String)>) {
+    let Some((socket, model)) = warmup_target(doc) else {
+        println!("  skipped (no live engine registered)");
+        return;
+    };
+    println!("  loading {} (one-time, a minute or two)...", model.bold());
+    let params = serde_json::json!({
+        "model": model,
+        "prompt": "hi",
+        "max_tokens": 1,
+        "temperature": 0.0,
+        "top_k": 0,
+        "top_p": 1.0,
+        "seed": 1,
+    });
+    match RouterctlClient::varlink_call_path(
+        &socket,
+        "io.syntrop.Runtime1.Generate",
+        params,
+        WARMUP_TIMEOUT,
+    )
+    .await
+    {
+        Ok(_) => {
+            println!("  {} engine warm", "LIVE ·".green().bold());
+            report.push(("engine-warmup".to_string(), "LIVE · weights resident".to_string()));
+        }
+        Err(e) => {
+            println!(
+                "  {} warmup failed ({}); first question pays the load",
+                "OFF ·".red().bold(),
+                e
+            );
+            report.push(("engine-warmup".to_string(), format!("OFF · {e}")));
+        }
+    }
+}
+
 fn print_summary(report: &[(String, String)]) {
     println!("{}", "Verified providers".green().bold());
     if report.is_empty() {
@@ -841,7 +936,7 @@ fn print_summary(report: &[(String, String)]) {
         println!("  {:<16} {}", id.bold(), status);
     }
     println!();
-    println!("models: routerctl models · try it: routerctl test");
+    println!("models: routerctl models · try it: syn say hello");
 }
 
 fn apply_root_syntrop_ownership(path: &Path) {
@@ -933,6 +1028,45 @@ mod tests {
         assert!(s.contains("id = \"runtimed-local\""));
         assert!(s.contains("kind = \"runtimed\""));
         assert!(s.contains("/run/syntrop/io.syntrop.Runtime1"));
+        assert!(s.contains("timeout_ms = 300000"));
+    }
+
+    #[test]
+    fn test_socket_kinds_skip_http_ping() {
+        assert!(is_socket_kind("runtimed"));
+        assert!(is_socket_kind("varlink"));
+        assert!(is_socket_kind("syntrop"));
+        assert!(is_socket_kind("Runtimed"));
+        assert!(!is_socket_kind("openai"));
+        assert!(!is_socket_kind("minimax"));
+        assert!(!is_socket_kind("ollama"));
+    }
+
+    fn warmup_doc(socket: &str, kind: &str, enabled: bool) -> DocumentMut {
+        let mut doc = DocumentMut::new();
+        doc["providers"] = Item::ArrayOfTables(ArrayOfTables::new());
+        let arr = doc["providers"].as_array_of_tables_mut().unwrap();
+        let mut table = Table::new();
+        table.insert("id", Item::Value(Value::from("runtimed-local")));
+        table.insert("kind", Item::Value(Value::from(kind)));
+        table.insert("base_url", Item::Value(Value::from(socket)));
+        table.insert("enabled", Item::Value(Value::from(enabled)));
+        set_models_array(&mut table, &["gemma".to_string()]);
+        arr.push(table);
+        doc
+    }
+
+    #[test]
+    fn test_warmup_target_needs_live_runtimed_row() {
+        // A real file stands in for the socket (existence is the check).
+        let sock = std::env::temp_dir().join(format!("warmup-test-{}.sock", std::process::id()));
+        std::fs::write(&sock, b"").unwrap();
+        let hit = warmup_target(&warmup_doc(sock.to_str().unwrap(), "runtimed", true)).unwrap();
+        assert_eq!(hit.1, "gemma");
+        assert!(warmup_target(&warmup_doc(sock.to_str().unwrap(), "runtimed", false)).is_none());
+        assert!(warmup_target(&warmup_doc(sock.to_str().unwrap(), "openai", true)).is_none());
+        assert!(warmup_target(&warmup_doc("/nonexistent/warmup.sock", "runtimed", true)).is_none());
+        let _ = std::fs::remove_file(&sock);
     }
 
     #[test]

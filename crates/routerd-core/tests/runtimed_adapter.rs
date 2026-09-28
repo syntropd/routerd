@@ -149,6 +149,58 @@ async fn health_and_models_use_runtimed_methods() {
     let _ = std::fs::remove_file(&path);
 }
 
+/// Serve once, but wait `delay` before answering (cold model load).
+async fn serve_once_slow(listener: UnixListener, delay: std::time::Duration) {
+    let (mut stream, _) = listener.accept().await.unwrap();
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 1024];
+    loop {
+        let n = stream.read(&mut chunk).await.unwrap();
+        assert!(n > 0, "client hung up");
+        buf.extend_from_slice(&chunk[..n]);
+        if buf.iter().position(|&b| b == 0).is_some() {
+            break;
+        }
+    }
+    tokio::time::sleep(delay).await;
+    let reply = json!({
+        "parameters": {
+            "result": {
+                "text": "Slow hello.",
+                "prompt_tokens": 5,
+                "completion_tokens": 3,
+                "finish_reason": "stop",
+                "duration_ms": 1000
+            }
+        }
+    });
+    let mut bytes = serde_json::to_vec(&reply).unwrap();
+    bytes.push(0);
+    stream.write_all(&bytes).await.unwrap();
+}
+
+#[tokio::test]
+async fn slow_generate_survives_snappy_configured_timeout() {
+    // Regression: a 30s configured timeout killed cold 3GB loads with
+    // "runtimed read timed out". Completions get a generous floor.
+    let path = socket_path("slow");
+    let _ = std::fs::remove_file(&path);
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        serve_once_slow(listener, std::time::Duration::from_secs(3)).await;
+    });
+    let mut config = cfg(&path);
+    config.timeout_ms = 300;
+    let adapter = create_adapter(&config);
+    let response = adapter
+        .chat_completion("gemma-4-E2B-it-Q4_K_M", &request())
+        .await
+        .expect("slow generate must survive the floor");
+    server.await.unwrap();
+    assert_eq!(response.choices[0].message.content_as_str(), "Slow hello.");
+    let _ = std::fs::remove_file(&path);
+}
+
 #[tokio::test]
 async fn stream_emits_single_chunk_then_done() {
     let path = socket_path("stream");
