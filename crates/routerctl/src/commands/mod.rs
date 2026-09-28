@@ -1,3 +1,4 @@
+pub mod ask;
 pub mod default_model;
 pub mod info;
 pub mod models;

@@ -42,6 +42,9 @@ async fn main() -> Result<()> {
         Commands::Setup(s_args) => {
             commands::setup::run_setup(&s_args).await?;
         }
+        Commands::Ask(a_args) => {
+            commands::ask::run_ask(&client, a_args, args.json).await?;
+        }
     }
 
     Ok(())

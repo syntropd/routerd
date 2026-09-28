@@ -45,6 +45,9 @@ pub enum Commands {
 
     /// Verify providers live and enable only what answers
     Setup(SetupArgs),
+
+    /// Ask a question and print the model's reply
+    Ask(AskArgs),
 }
 
 #[derive(Args, Debug)]
@@ -117,6 +120,21 @@ pub struct DefaultArgs {
 pub struct InfoArgs {
     /// Specific interface to inspect (e.g. io.syntrop.Router1)
     pub interface: Option<String>,
+}
+
+#[derive(Args, Debug)]
+pub struct AskArgs {
+    /// Model or alias (router:auto, router:fast, router:hard, or a model name)
+    #[arg(short, long, default_value = "router:auto")]
+    pub model: String,
+
+    /// Max completion tokens
+    #[arg(long, default_value_t = 256)]
+    pub max_tokens: usize,
+
+    /// Question words (joined with spaces)
+    #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+    pub prompt: Vec<String>,
 }
 
 #[derive(Args, Debug, Clone)]
