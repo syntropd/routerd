@@ -30,12 +30,17 @@ impl VarlinkBridgeAdapter {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
 
+        let mut params = json!({
+            "prompt": prompt,
+            "model": target_model
+        });
+        if let Some(budget) = request.reasoning_budget() {
+            params["reasoning_budget"] = json!(budget);
+        }
+
         let req = json!({
             "method": "io.syntrop.Inference1.StreamInference",
-            "parameters": {
-                "prompt": prompt,
-                "model": target_model
-            },
+            "parameters": params,
             "more": true
         });
 
@@ -54,6 +59,7 @@ impl VarlinkBridgeAdapter {
 
         tokio::spawn(async move {
             let mut buf = Vec::with_capacity(512);
+            let mut filter = crate::wire::ThinkFilter::new();
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap_or_default()
@@ -94,7 +100,43 @@ impl VarlinkBridgeAdapter {
                                     .and_then(|p| p.get("chunk"))
                                     .and_then(|c| c.as_str())
                                 {
-                                    let chunk_obj = ChatCompletionChunk {
+                                    let mut items = filter.process(chunk_text);
+                                    if !continues {
+                                        items.extend(filter.flush());
+                                    }
+                                    for item in items {
+                                        let (content, reasoning) = match item {
+                                            crate::wire::FilteredItem::Content(c) => (Some(c), None),
+                                            crate::wire::FilteredItem::Reasoning(r) => (None, Some(r)),
+                                        };
+                                        let chunk_obj = ChatCompletionChunk {
+                                            id: completion_id.clone(),
+                                            object: "chat.completion.chunk".to_string(),
+                                            created: now,
+                                            model: model_str.clone(),
+                                            choices: vec![ChunkChoice {
+                                                index: 0,
+                                                delta: ChunkDelta {
+                                                    role: None,
+                                                    content,
+                                                    reasoning_content: reasoning,
+                                                },
+                                                finish_reason: None,
+                                            }],
+                                        };
+
+                                        let sse_line = format!(
+                                            "data: {}\n\n",
+                                            serde_json::to_string(&chunk_obj).unwrap_or_default()
+                                        );
+                                        if tx.send(Ok(Bytes::from(sse_line))).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if !continues {
+                                    let stop_chunk = ChatCompletionChunk {
                                         id: completion_id.clone(),
                                         object: "chat.completion.chunk".to_string(),
                                         created: now,
@@ -103,22 +145,17 @@ impl VarlinkBridgeAdapter {
                                             index: 0,
                                             delta: ChunkDelta {
                                                 role: None,
-                                                content: Some(chunk_text.to_string()),
+                                                content: None,
+                                                reasoning_content: None,
                                             },
-                                            finish_reason: if continues { None } else { Some("stop".to_string()) },
+                                            finish_reason: Some("stop".to_string()),
                                         }],
                                     };
-
                                     let sse_line = format!(
                                         "data: {}\n\n",
-                                        serde_json::to_string(&chunk_obj).unwrap_or_default()
+                                        serde_json::to_string(&stop_chunk).unwrap_or_default()
                                     );
-                                    if tx.send(Ok(Bytes::from(sse_line))).await.is_err() {
-                                        break;
-                                    }
-                                }
-
-                                if !continues {
+                                    let _ = tx.send(Ok(Bytes::from(sse_line))).await;
                                     break;
                                 }
                             }

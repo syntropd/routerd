@@ -100,12 +100,10 @@ async fn test_provider_failover_retry_success() {
             content: serde_json::json!("Test failover query"),
             name: None,
         }],
-        temperature: None,
-        top_p: None,
-        max_tokens: Some(64),
-        max_completion_tokens: None,
-        stream: Some(false),
+        temperature: None, top_p: None,
+        max_tokens: Some(64), max_completion_tokens: None, stream: Some(false),
         tier: Some("fast".to_string()),
+        reasoning_budget: None, max_thinking_tokens: None,
         extra: std::collections::HashMap::new(),
     };
 
@@ -187,12 +185,10 @@ async fn test_provider_failover_exhaustion() {
             content: serde_json::json!("Test failover exhaustion"),
             name: None,
         }],
-        temperature: None,
-        top_p: None,
-        max_tokens: Some(64),
-        max_completion_tokens: None,
-        stream: Some(false),
+        temperature: None, top_p: None,
+        max_tokens: Some(64), max_completion_tokens: None, stream: Some(false),
         tier: Some("fast".to_string()),
+        reasoning_budget: None, max_thinking_tokens: None,
         extra: std::collections::HashMap::new(),
     };
 
@@ -241,6 +237,7 @@ async fn test_streaming_dispatch_collects_chunks() {
         temperature: None, top_p: None,
         max_tokens: Some(64), max_completion_tokens: None, stream: Some(true),
         tier: Some("fast".to_string()),
+        reasoning_budget: None, max_thinking_tokens: None,
         extra: std::collections::HashMap::new(),
     };
     let (mut stream, scored) = engine.route_chat_stream(&req).await.unwrap();

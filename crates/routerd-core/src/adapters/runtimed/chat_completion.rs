@@ -25,7 +25,7 @@ impl RuntimedAdapter {
             .max_tokens
             .or(request.max_completion_tokens)
             .unwrap_or(256);
-        let params = json!({
+        let mut params = json!({
             "model": target_model,
             "prompt": prompt,
             "max_tokens": max_tokens,
@@ -35,6 +35,9 @@ impl RuntimedAdapter {
             "seed": 0,
             "image": Value::Null,
         });
+        if let Some(budget) = request.reasoning_budget() {
+            params["reasoning_budget"] = json!(budget);
+        }
         let parameters = self
             .call_with_timeout("io.syntrop.Runtime1.Generate", params, self.generate_timeout)
             .await?;
@@ -91,7 +94,36 @@ impl RuntimedAdapter {
         let now = full.created;
         tokio::spawn(async move {
             if let Some(text) = text {
-                let chunk_obj = ChatCompletionChunk {
+                let mut filter = crate::wire::ThinkFilter::new();
+                let mut items = filter.process(&text);
+                items.extend(filter.flush());
+                for (i, item) in items.into_iter().enumerate() {
+                    let (content, reasoning) = match item {
+                        crate::wire::FilteredItem::Content(c) => (Some(c), None),
+                        crate::wire::FilteredItem::Reasoning(r) => (None, Some(r)),
+                    };
+                    let chunk_obj = ChatCompletionChunk {
+                        id: completion_id.clone(),
+                        object: "chat.completion.chunk".to_string(),
+                        created: now,
+                        model: model_str.clone(),
+                        choices: vec![ChunkChoice {
+                            index: 0,
+                            delta: ChunkDelta {
+                                role: (i == 0).then(|| "assistant".to_string()),
+                                content,
+                                reasoning_content: reasoning,
+                            },
+                            finish_reason: None,
+                        }],
+                    };
+                    let sse_line = format!(
+                        "data: {}\n\n",
+                        serde_json::to_string(&chunk_obj).unwrap_or_default()
+                    );
+                    let _ = tx.send(Ok(Bytes::from(sse_line))).await;
+                }
+                let final_chunk = ChatCompletionChunk {
                     id: completion_id,
                     object: "chat.completion.chunk".to_string(),
                     created: now,
@@ -100,14 +132,15 @@ impl RuntimedAdapter {
                         index: 0,
                         delta: ChunkDelta {
                             role: None,
-                            content: Some(text),
+                            content: None,
+                            reasoning_content: None,
                         },
                         finish_reason: Some("stop".to_string()),
                     }],
                 };
                 let sse_line = format!(
                     "data: {}\n\n",
-                    serde_json::to_string(&chunk_obj).unwrap_or_default()
+                    serde_json::to_string(&final_chunk).unwrap_or_default()
                 );
                 let _ = tx.send(Ok(Bytes::from(sse_line))).await;
             }

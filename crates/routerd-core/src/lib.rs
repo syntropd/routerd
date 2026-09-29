@@ -26,8 +26,8 @@ pub use router::{DaemonStatusInfo, ProviderStatusInfo, RouterEngine};
 pub use scoring::{CandidateProvider, RequestProfile, ScoredCandidate, ScoringEngine};
 pub use telemetry::{PressureLevel, PressureMetrics, TelemetryClient};
 pub use wire::{
-    configure_mesh_tcp, ScmpFrame, ScmpHeader, ScmpMessageType, HEADER_LEN, SCMP_MAGIC,
-    SCMP_VERSION,
+    configure_mesh_tcp, FilteredItem, ScmpFrame, ScmpHeader, ScmpMessageType, ThinkFilter,
+    ThinkFilterState, HEADER_LEN, SCMP_MAGIC, SCMP_VERSION,
 };
 
 /// Default router configuration template. Lives in this crate (not the

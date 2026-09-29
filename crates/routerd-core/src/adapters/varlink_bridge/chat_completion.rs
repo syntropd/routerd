@@ -28,12 +28,17 @@ impl VarlinkBridgeAdapter {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
 
+        let mut params = json!({
+            "prompt": prompt,
+            "model": target_model
+        });
+        if let Some(budget) = request.reasoning_budget() {
+            params["reasoning_budget"] = json!(budget);
+        }
+
         let req = json!({
             "method": "io.syntrop.Inference1.StreamInference",
-            "parameters": {
-                "prompt": prompt,
-                "model": target_model
-            },
+            "parameters": params,
             "more": true
         });
 

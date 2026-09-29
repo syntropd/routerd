@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "06efa04",
+ "rev": "c69d5c3",
  "dirty": true,
  "pages": [
   {
@@ -201,7 +201,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/minimax_tests.rs",
-   "lines": 63,
+   "lines": 65,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -222,14 +222,14 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/openai_tests.rs",
-   "lines": 74,
+   "lines": 76,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 118,
+   "lines": 151,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -264,14 +264,14 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_completion.rs",
-   "lines": 116,
+   "lines": 121,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_stream.rs",
-   "lines": 148,
+   "lines": 185,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -397,7 +397,7 @@
   },
   {
    "path": "./crates/routerd-core/src/models/chat_types.rs",
-   "lines": 196,
+   "lines": 219,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -460,7 +460,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/report_status.rs",
-   "lines": 206,
+   "lines": 208,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -550,6 +550,13 @@
    "reach": 0
   },
   {
+   "path": "./crates/routerd-core/src/wire/filter_think.rs",
+   "lines": 221,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
    "path": "./crates/routerd-core/src/wire/framing.rs",
    "lines": 176,
    "bin_bytes": null,
@@ -558,14 +565,14 @@
   },
   {
    "path": "./crates/routerd-core/src/wire/mod.rs",
-   "lines": 19,
+   "lines": 21,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/tests/runtimed_adapter.rs",
-   "lines": 223,
+   "lines": 225,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -691,7 +698,7 @@
   },
   {
    "path": "./qa/tests/daemon/router1_tests.rs",
-   "lines": 147,
+   "lines": 161,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -719,7 +726,7 @@
   },
   {
    "path": "./qa/tests/gateway/chat_gateway_tests.rs",
-   "lines": 154,
+   "lines": 160,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -754,21 +761,21 @@
   },
   {
    "path": "./qa/tests/routing/bridge_tests.rs",
-   "lines": 203,
+   "lines": 205,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/context_limits_tests.rs",
-   "lines": 83,
+   "lines": 89,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/failover_tests.rs",
-   "lines": 253,
+   "lines": 250,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

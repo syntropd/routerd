@@ -44,6 +44,10 @@ pub struct ChatCompletionRequest {
     pub stream: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tier: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_budget: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_thinking_tokens: Option<usize>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, Value>,
 }
@@ -84,6 +88,11 @@ impl ChatCompletionRequest {
         }
         None
     }
+
+    /// Extract effective reasoning token budget if requested.
+    pub fn reasoning_budget(&self) -> Option<usize> {
+        self.reasoning_budget.or(self.max_thinking_tokens)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -117,6 +126,8 @@ pub struct ChunkDelta {
     pub role: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +166,8 @@ mod tests {
             max_completion_tokens: None,
             stream: None,
             tier: tier.map(str::to_string),
+            reasoning_budget: None,
+            max_thinking_tokens: None,
             extra: HashMap::new(),
         }
     }
@@ -192,5 +205,15 @@ mod tests {
         let req = request("router:fast", None, None);
         assert!(req.estimate_prompt_tokens() >= 1);
         assert_eq!(req.estimate_total_tokens(), req.estimate_prompt_tokens() + 2048);
+    }
+
+    #[test]
+    fn reasoning_budget_prefers_explicit_then_max_thinking() {
+        let mut req = request("test", None, None);
+        assert_eq!(req.reasoning_budget(), None);
+        req.max_thinking_tokens = Some(500);
+        assert_eq!(req.reasoning_budget(), Some(500));
+        req.reasoning_budget = Some(1000);
+        assert_eq!(req.reasoning_budget(), Some(1000));
     }
 }

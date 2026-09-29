@@ -23,6 +23,8 @@ fn test_token_estimation_and_limits() {
         max_completion_tokens: None,
         stream: None,
         tier: None,
+        reasoning_budget: None,
+        max_thinking_tokens: None,
         extra: std::collections::HashMap::new(),
     };
 
@@ -49,6 +51,8 @@ fn test_zero_cross_chat_context_contamination() {
         max_completion_tokens: None,
         stream: None,
         tier: None,
+        reasoning_budget: None,
+        max_thinking_tokens: None,
         extra: std::collections::HashMap::new(),
     };
 
@@ -69,6 +73,8 @@ fn test_zero_cross_chat_context_contamination() {
         max_completion_tokens: None,
         stream: None,
         tier: None,
+        reasoning_budget: None,
+        max_thinking_tokens: None,
         extra: std::collections::HashMap::new(),
     };
 

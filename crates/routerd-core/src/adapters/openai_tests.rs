@@ -32,6 +32,8 @@ fn request() -> ChatCompletionRequest {
         max_completion_tokens: Some(9),
         stream: None,
         tier: None,
+        reasoning_budget: None,
+        max_thinking_tokens: None,
         extra: HashMap::new(),
     }
 }

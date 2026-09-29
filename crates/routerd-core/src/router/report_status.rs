@@ -24,6 +24,8 @@ impl RouterEngine {
             max_completion_tokens: None,
             stream: Some(require_stream),
             tier: tier.map(|t| t.to_string()),
+            reasoning_budget: None,
+            max_thinking_tokens: None,
             extra: HashMap::new(),
         };
 
