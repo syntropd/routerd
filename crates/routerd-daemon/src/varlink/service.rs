@@ -85,7 +85,12 @@ method TestProvider(
   latency_ms: float,
   error: ?string
 )
+
+method Reload() -> (
+  reloaded_models: int
+)
 "#;
+
 
 pub fn handle_get_info() -> VarlinkReply {
     VarlinkReply::ok(json!({

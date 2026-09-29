@@ -16,9 +16,21 @@ pub async fn handle_method(
         "ListModels" => Some(handle_list_models(engine).await),
         "RouteRequest" => Some(handle_route_request(params, engine).await),
         "TestProvider" => Some(handle_test_provider(params, engine).await),
+        "Reload" => Some(handle_reload(engine).await),
         _ => None,
     }
 }
+
+async fn handle_reload(engine: &Arc<RouterEngine>) -> VarlinkReply {
+    match engine.reload_models().await {
+        Ok(count) => VarlinkReply::ok(json!({ "reloaded_models": count })),
+        Err(e) => VarlinkReply::error(
+            "io.syntrop.Router1.ReloadFailed",
+            json!({ "message": e.to_string() }),
+        ),
+    }
+}
+
 
 async fn handle_get_status(engine: &Arc<RouterEngine>) -> VarlinkReply {
     let status = engine.get_daemon_status().await;

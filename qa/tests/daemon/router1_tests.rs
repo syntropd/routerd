@@ -99,3 +99,12 @@ async fn router1_routes_tests_and_rejects_unknown() {
     assert_eq!(bogus["error"], "org.varlink.service.MethodNotFound");
     let _ = std::fs::remove_file(&path);
 }
+
+#[tokio::test]
+async fn router1_handles_reload() {
+    let path = start_daemon("reload").await;
+    let res = call(&path, "io.syntrop.Router1.Reload", json!({})).await;
+    assert!(res["parameters"]["reloaded_models"].is_number());
+    let _ = std::fs::remove_file(&path);
+}
+

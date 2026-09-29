@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "af74fb2",
+ "rev": "be06599",
  "dirty": true,
  "pages": [
   {
@@ -57,7 +57,7 @@
    "lines": 72,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 25
+   "reach": 26
   },
   {
    "path": "./crates/routerctl/src/commands/catalog/mod.rs",
@@ -195,7 +195,7 @@
   {
    "path": "./crates/routerd-core/src/adapters/minimax.rs",
    "lines": 201,
-   "bin_bytes": null,
+   "bin_bytes": 24962,
    "heat_pct": null,
    "reach": 2
   },
@@ -209,14 +209,14 @@
   {
    "path": "./crates/routerd-core/src/adapters/mod.rs",
    "lines": 57,
-   "bin_bytes": null,
+   "bin_bytes": 691,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/openai.rs",
    "lines": 250,
-   "bin_bytes": null,
+   "bin_bytes": 29694,
    "heat_pct": null,
    "reach": 2
   },
@@ -230,14 +230,14 @@
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
    "lines": 118,
-   "bin_bytes": null,
+   "bin_bytes": 16731,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/engine_call.rs",
    "lines": 134,
-   "bin_bytes": null,
+   "bin_bytes": 14211,
    "heat_pct": null,
    "reach": 1
   },
@@ -251,28 +251,28 @@
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/probe.rs",
    "lines": 38,
-   "bin_bytes": null,
+   "bin_bytes": 3022,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/bridge_adapter.rs",
    "lines": 75,
-   "bin_bytes": null,
+   "bin_bytes": 5402,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_completion.rs",
    "lines": 116,
-   "bin_bytes": null,
+   "bin_bytes": 14604,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_stream.rs",
    "lines": 148,
-   "bin_bytes": null,
+   "bin_bytes": 18676,
    "heat_pct": null,
    "reach": 0
   },
@@ -286,7 +286,7 @@
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/probe.rs",
    "lines": 104,
-   "bin_bytes": null,
+   "bin_bytes": 9799,
    "heat_pct": null,
    "reach": 0
   },
@@ -300,21 +300,21 @@
   {
    "path": "./crates/routerd-core/src/config/daemon_config.rs",
    "lines": 43,
-   "bin_bytes": null,
+   "bin_bytes": 23168,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/config/load_config.rs",
    "lines": 96,
-   "bin_bytes": null,
+   "bin_bytes": 20657,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/config/local_rule.rs",
    "lines": 33,
-   "bin_bytes": null,
+   "bin_bytes": 1086,
    "heat_pct": null,
    "reach": 1
   },
@@ -328,37 +328,37 @@
   {
    "path": "./crates/routerd-core/src/config/provider_config.rs",
    "lines": 44,
-   "bin_bytes": null,
+   "bin_bytes": 42276,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/config/thresholds_config.rs",
    "lines": 43,
-   "bin_bytes": null,
+   "bin_bytes": 13920,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/config/tier_config.rs",
    "lines": 31,
-   "bin_bytes": null,
+   "bin_bytes": 18937,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/credentials.rs",
    "lines": 175,
-   "bin_bytes": null,
+   "bin_bytes": 9277,
    "heat_pct": null,
    "reach": 3
   },
   {
    "path": "./crates/routerd-core/src/error.rs",
    "lines": 68,
-   "bin_bytes": null,
+   "bin_bytes": 3933,
    "heat_pct": null,
-   "reach": 21
+   "reach": 22
   },
   {
    "path": "./crates/routerd-core/src/lib.rs",
@@ -370,7 +370,7 @@
   {
    "path": "./crates/routerd-core/src/mesh/cluster_topology.rs",
    "lines": 82,
-   "bin_bytes": null,
+   "bin_bytes": 1682,
    "heat_pct": null,
    "reach": 1
   },
@@ -384,21 +384,21 @@
   {
    "path": "./crates/routerd-core/src/mesh/node_registry.rs",
    "lines": 105,
-   "bin_bytes": null,
+   "bin_bytes": 1711,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-core/src/mesh/pipeline_circuit.rs",
    "lines": 146,
-   "bin_bytes": null,
+   "bin_bytes": 1205,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/models/chat_types.rs",
    "lines": 196,
-   "bin_bytes": null,
+   "bin_bytes": 51868,
    "heat_pct": null,
    "reach": 1
   },
@@ -412,27 +412,27 @@
   {
    "path": "./crates/routerd-core/src/models/provider_models.rs",
    "lines": 118,
-   "bin_bytes": null,
+   "bin_bytes": 13063,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_chat.rs",
    "lines": 111,
-   "bin_bytes": null,
+   "bin_bytes": 14082,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_stream.rs",
    "lines": 107,
-   "bin_bytes": null,
+   "bin_bytes": 13766,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/router/mod.rs",
-   "lines": 7,
+   "lines": 9,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -440,28 +440,35 @@
   {
    "path": "./crates/routerd-core/src/router/prepare_routing.rs",
    "lines": 100,
-   "bin_bytes": null,
+   "bin_bytes": 8781,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/router/provider_entry.rs",
    "lines": 84,
-   "bin_bytes": null,
+   "bin_bytes": 3792,
    "heat_pct": null,
    "reach": 3
   },
   {
+   "path": "./crates/routerd-core/src/router/reload_models.rs",
+   "lines": 127,
+   "bin_bytes": 15396,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
    "path": "./crates/routerd-core/src/router/report_status.rs",
    "lines": 201,
-   "bin_bytes": null,
+   "bin_bytes": 15080,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/scoring/candidate.rs",
    "lines": 31,
-   "bin_bytes": null,
+   "bin_bytes": 2133,
    "heat_pct": null,
    "reach": 1
   },
@@ -475,21 +482,21 @@
   {
    "path": "./crates/routerd-core/src/scoring/rank_select.rs",
    "lines": 49,
-   "bin_bytes": null,
+   "bin_bytes": 2230,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/scoring/request_profile.rs",
    "lines": 52,
-   "bin_bytes": null,
+   "bin_bytes": 2050,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/scoring/score_candidate.rs",
    "lines": 191,
-   "bin_bytes": null,
+   "bin_bytes": 4609,
    "heat_pct": null,
    "reach": 1
   },
@@ -510,28 +517,28 @@
   {
    "path": "./crates/routerd-core/src/telemetry/pressure_types.rs",
    "lines": 52,
-   "bin_bytes": null,
+   "bin_bytes": 666,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/telemetry/query_varlink.rs",
    "lines": 163,
-   "bin_bytes": null,
+   "bin_bytes": 14467,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/telemetry/read_kernel_psi.rs",
    "lines": 99,
-   "bin_bytes": null,
+   "bin_bytes": 2394,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/wire/framing.rs",
    "lines": 176,
-   "bin_bytes": null,
+   "bin_bytes": 5945,
    "heat_pct": null,
    "reach": 1
   },
@@ -552,28 +559,28 @@
   {
    "path": "./crates/routerd-daemon/src/activation.rs",
    "lines": 135,
-   "bin_bytes": null,
+   "bin_bytes": 26998,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/chat.rs",
    "lines": 110,
-   "bin_bytes": null,
+   "bin_bytes": 17355,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/health.rs",
    "lines": 29,
-   "bin_bytes": null,
+   "bin_bytes": 6723,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
    "lines": 21,
-   "bin_bytes": null,
+   "bin_bytes": 1398,
    "heat_pct": null,
    "reach": 0
   },
@@ -594,49 +601,49 @@
   {
    "path": "./crates/routerd-daemon/src/notify.rs",
    "lines": 113,
-   "bin_bytes": null,
+   "bin_bytes": 11749,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-daemon/src/rss.rs",
    "lines": 62,
-   "bin_bytes": null,
+   "bin_bytes": 3155,
    "heat_pct": null,
    "reach": 3
   },
   {
    "path": "./crates/routerd-daemon/src/server.rs",
    "lines": 85,
-   "bin_bytes": null,
+   "bin_bytes": 3706,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-daemon/src/varlink/mod.rs",
    "lines": 109,
-   "bin_bytes": null,
+   "bin_bytes": 17524,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-daemon/src/varlink/protocol.rs",
    "lines": 112,
-   "bin_bytes": null,
+   "bin_bytes": 10030,
    "heat_pct": null,
    "reach": 3
   },
   {
    "path": "./crates/routerd-daemon/src/varlink/router1.rs",
-   "lines": 95,
-   "bin_bytes": null,
+   "lines": 107,
+   "bin_bytes": 23434,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-daemon/src/varlink/service.rs",
-   "lines": 124,
-   "bin_bytes": null,
+   "lines": 129,
+   "bin_bytes": 6304,
    "heat_pct": null,
    "reach": 3
   },
@@ -670,7 +677,7 @@
   },
   {
    "path": "./qa/tests/daemon/router1_tests.rs",
-   "lines": 101,
+   "lines": 110,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -774,5 +781,5 @@
    "reach": 0
   }
  ],
- "notes": "reach counts referencing files (shared file names qualified by ancestor dir);"
+ "notes": "reach counts referencing files (shared file names qualified by ancestor dir); bin_bytes from newest workspace dev rlib per crate via nm (inlining approx, bins re-link the same code; shims excluded, foreign paths never attributed);"
 }
