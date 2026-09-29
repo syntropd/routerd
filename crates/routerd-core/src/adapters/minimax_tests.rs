@@ -56,6 +56,7 @@ fn payload_passes_extras_except_reserved() {
         tier: None,
         reasoning_budget: None,
         max_thinking_tokens: None,
+        reasoning_content: None,
         extra: [("tier".to_string(), serde_json::json!("fast"))].into_iter().collect(),
     };
     let body = adapter("https://x/v1", None).build_payload("m", &req, true);

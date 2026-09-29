@@ -59,6 +59,20 @@ impl RuntimedAdapter {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
+        let mut filter = crate::wire::ThinkFilter::new();
+        let mut items = filter.process(text);
+        items.extend(filter.flush());
+        let mut clean_content = String::new();
+        for item in items {
+            if let crate::wire::FilteredItem::Content(c) = item {
+                clean_content.push_str(&c);
+            }
+        }
+        let final_content = if clean_content.is_empty() && !text.is_empty() {
+            text.to_string()
+        } else {
+            clean_content
+        };
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-runtimed-{}", Uuid::new_v4()),
             object: "chat.completion".to_string(),
@@ -68,7 +82,7 @@ impl RuntimedAdapter {
                 index: 0,
                 message: ChatMessage {
                     role: "assistant".to_string(),
-                    content: Value::String(text.to_string()),
+                    content: Value::String(final_content),
                     name: None,
                 },
                 finish_reason: Some(finish.to_string()),

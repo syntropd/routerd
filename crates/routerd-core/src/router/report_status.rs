@@ -26,6 +26,7 @@ impl RouterEngine {
             tier: tier.map(|t| t.to_string()),
             reasoning_budget: None,
             max_thinking_tokens: None,
+            reasoning_content: None,
             extra: HashMap::new(),
         };
 

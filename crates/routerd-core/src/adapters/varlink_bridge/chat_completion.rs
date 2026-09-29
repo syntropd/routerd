@@ -94,8 +94,23 @@ impl VarlinkBridgeAdapter {
             .unwrap_or_default()
             .as_secs();
 
+        let mut filter = crate::wire::ThinkFilter::new();
+        let mut items = filter.process(&accumulated_text);
+        items.extend(filter.flush());
+        let mut clean_content = String::new();
+        for item in items {
+            if let crate::wire::FilteredItem::Content(c) = item {
+                clean_content.push_str(&c);
+            }
+        }
+        let final_content = if clean_content.is_empty() && !accumulated_text.is_empty() {
+            accumulated_text
+        } else {
+            clean_content
+        };
+
         let prompt_tok = request.estimate_prompt_tokens();
-        let comp_tok = (accumulated_text.len() as f64 / 3.8).ceil() as usize;
+        let comp_tok = (final_content.len() as f64 / 3.8).ceil() as usize;
 
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-varlink-{}", Uuid::new_v4()),
@@ -106,7 +121,7 @@ impl VarlinkBridgeAdapter {
                 index: 0,
                 message: ChatMessage {
                     role: "assistant".to_string(),
-                    content: Value::String(accumulated_text),
+                    content: Value::String(final_content),
                     name: None,
                 },
                 finish_reason: Some("stop".to_string()),

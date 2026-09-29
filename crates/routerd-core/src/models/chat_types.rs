@@ -48,6 +48,8 @@ pub struct ChatCompletionRequest {
     pub reasoning_budget: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_thinking_tokens: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, Value>,
 }
@@ -168,6 +170,7 @@ mod tests {
             tier: tier.map(str::to_string),
             reasoning_budget: None,
             max_thinking_tokens: None,
+            reasoning_content: None,
             extra: HashMap::new(),
         }
     }
