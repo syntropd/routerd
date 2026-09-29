@@ -10,6 +10,7 @@ use std::sync::Arc;
 pub async fn health_handler(State(engine): State<Arc<RouterEngine>>) -> impl IntoResponse {
     let status = engine.get_daemon_status().await;
     let mem = MemoryStats::read_current();
+    let hw = engine.get_hardware_telemetry().await;
 
     let body = json!({
         "status": status.status,
@@ -23,6 +24,7 @@ pub async fn health_handler(State(engine): State<Arc<RouterEngine>>) -> impl Int
         "psi_memory_some": status.psi_memory_some,
         "rss_bytes": mem.rss_bytes,
         "rss_mb": mem.rss_mb(),
+        "telemetry": hw,
     });
 
     (StatusCode::OK, Json(body))

@@ -89,6 +89,58 @@ method TestProvider(
 method Reload() -> (
   reloaded_models: int
 )
+
+type DrmGpuTelemetry (
+  id: string,
+  name: string,
+  total_vram_bytes: int,
+  used_vram_bytes: int,
+  available_vram_bytes: int,
+  features: ?[]string
+)
+
+type HostRamTelemetry (
+  total_bytes: int,
+  available_bytes: int,
+  used_bytes: int
+)
+
+type CpuMatrixTelemetry (
+  name: string,
+  cores: int,
+  features: ?[]string
+)
+
+type ComputeLeaseTelemetry (
+  id: string,
+  plane_id: string,
+  allocated_memory: int,
+  priority: string,
+  state: string,
+  client_unit: ?string,
+  client_pid: ?int
+)
+
+type RuntimeLoadTelemetry (
+  available_slots: int,
+  max_slots: int,
+  used_bytes: int
+)
+
+type HardwareTelemetryReport (
+  gpus: []DrmGpuTelemetry,
+  host_ram: HostRamTelemetry,
+  cpu: CpuMatrixTelemetry,
+  psi_level: string,
+  psi_memory_some: float,
+  active_leases: []ComputeLeaseTelemetry,
+  runtime_load: ?RuntimeLoadTelemetry
+)
+
+method GetHealthTelemetry() -> (
+  status: string,
+  telemetry: HardwareTelemetryReport
+)
 "#;
 
 

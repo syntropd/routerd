@@ -10,6 +10,8 @@ pub struct DaemonConfig {
     pub varlink_socket: String,
     #[serde(default = "default_inferenced_socket")]
     pub inferenced_socket: String,
+    #[serde(default = "default_runtimed_socket")]
+    pub runtimed_socket: String,
     #[serde(default = "default_log_level")]
     pub log_level: String,
 }
@@ -26,6 +28,10 @@ fn default_varlink_socket() -> String {
 fn default_inferenced_socket() -> String {
     "/run/syntrop/io.syntrop.Inference1".to_string()
 }
+fn default_runtimed_socket() -> String {
+    std::env::var("SYNTROP_RUNTIME_SOCKET")
+        .unwrap_or_else(|_| "/run/syntrop/io.syntrop.Runtime1".to_string())
+}
 fn default_log_level() -> String {
     "info".to_string()
 }
@@ -37,6 +43,7 @@ impl Default for DaemonConfig {
             listen_unix: default_listen_unix(),
             varlink_socket: default_varlink_socket(),
             inferenced_socket: default_inferenced_socket(),
+            runtimed_socket: default_runtimed_socket(),
             log_level: default_log_level(),
         }
     }

@@ -1,6 +1,6 @@
 use crate::adapters::ProviderAdapter;
 use crate::config::{ProviderConfig, RouterConfig};
-use crate::telemetry::TelemetryClient;
+use crate::telemetry::{HardwareTelemetryClient, TelemetryClient};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -69,6 +69,7 @@ pub struct RouterEngine {
     pub(super) config: Arc<RwLock<RouterConfig>>,
     pub(super) providers: Arc<RwLock<HashMap<String, ProviderEntry>>>,
     pub(super) telemetry: TelemetryClient,
+    pub(super) hardware_telemetry: HardwareTelemetryClient,
     pub(super) start_time: Instant,
     pub(super) total_requests: AtomicU64,
     pub(super) active_requests: AtomicUsize,

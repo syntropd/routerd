@@ -46,6 +46,11 @@ impl RouterConfig {
     }
 
     fn ensure_defaults(&mut self) {
+        if let Ok(override_sock) = std::env::var("SYNTROP_RUNTIME_SOCKET") {
+            if !override_sock.is_empty() {
+                self.daemon.runtimed_socket = override_sock;
+            }
+        }
         if !self.tiers.contains_key("fast") {
             self.tiers.insert(
                 "fast".to_string(),

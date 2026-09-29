@@ -4,7 +4,7 @@ use crate::config::{is_local_provider, RouterConfig, ThresholdsConfig, TierConfi
 use crate::error::Result;
 use crate::models::ChatCompletionRequest;
 use crate::scoring::{CandidateProvider, RequestProfile};
-use crate::telemetry::TelemetryClient;
+use crate::telemetry::{HardwareTelemetryClient, TelemetryClient};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, AtomicUsize};
 use std::sync::Arc;
@@ -15,6 +15,10 @@ use tracing::warn;
 impl RouterEngine {
     pub fn new(config: RouterConfig) -> Self {
         let telemetry = TelemetryClient::new(&config.daemon.inferenced_socket);
+        let hardware_telemetry = HardwareTelemetryClient::new(
+            &config.daemon.inferenced_socket,
+            &config.daemon.runtimed_socket,
+        );
         let mut entries = HashMap::new();
 
         for p in &config.providers {
@@ -48,6 +52,7 @@ impl RouterEngine {
             config: Arc::new(RwLock::new(config)),
             providers: Arc::new(RwLock::new(entries)),
             telemetry,
+            hardware_telemetry,
             start_time: Instant::now(),
             total_requests: AtomicU64::new(0),
             active_requests: AtomicUsize::new(0),
@@ -56,6 +61,10 @@ impl RouterEngine {
 
     pub fn telemetry(&self) -> &TelemetryClient {
         &self.telemetry
+    }
+
+    pub fn hardware_telemetry(&self) -> &HardwareTelemetryClient {
+        &self.hardware_telemetry
     }
 
     pub(super) async fn prepare_routing(

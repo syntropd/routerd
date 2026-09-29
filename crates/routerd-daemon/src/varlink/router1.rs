@@ -12,6 +12,7 @@ pub async fn handle_method(
 
     match sub {
         "GetStatus" => Some(handle_get_status(engine).await),
+        "GetHealthTelemetry" => Some(handle_get_health_telemetry(engine).await),
         "ListProviders" => Some(handle_list_providers(engine).await),
         "ListModels" => Some(handle_list_models(engine).await),
         "RouteRequest" => Some(handle_route_request(params, engine).await),
@@ -19,6 +20,14 @@ pub async fn handle_method(
         "Reload" => Some(handle_reload(engine).await),
         _ => None,
     }
+}
+
+async fn handle_get_health_telemetry(engine: &Arc<RouterEngine>) -> VarlinkReply {
+    let telemetry = engine.get_hardware_telemetry().await;
+    VarlinkReply::ok(json!({
+        "status": "active",
+        "telemetry": telemetry,
+    }))
 }
 
 async fn handle_reload(engine: &Arc<RouterEngine>) -> VarlinkReply {

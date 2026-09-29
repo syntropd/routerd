@@ -125,6 +125,11 @@ impl RouterEngine {
         }
     }
 
+    /// Returns consolidated hardware and resource telemetry report.
+    pub async fn get_hardware_telemetry(&self) -> crate::telemetry::HardwareTelemetryReport {
+        self.hardware_telemetry.get_report().await
+    }
+
     /// Test a specific provider by sending a health ping or probe.
     pub async fn test_provider(
         &self,
