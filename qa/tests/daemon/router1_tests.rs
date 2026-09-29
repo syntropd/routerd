@@ -145,3 +145,17 @@ async fn router1_handles_reload_with_files() {
     std::env::remove_var("SYNTROP_MODELS_GGUF_DIR");
     let _ = std::fs::remove_file(&path);
 }
+
+#[tokio::test]
+async fn router1_handles_get_health_telemetry() {
+    let path = start_daemon("health_telemetry").await;
+    let reply = call(&path, "io.syntrop.Router1.GetHealthTelemetry", json!({})).await;
+    assert_eq!(reply["parameters"]["status"], "active");
+    let tel = &reply["parameters"]["telemetry"];
+    assert!(tel["cpu"]["cores"].as_u64().unwrap() > 0);
+    assert!(!tel["cpu"]["name"].as_str().unwrap().is_empty());
+    assert!(tel["host_ram"]["total_bytes"].is_number());
+    assert!(tel["psi_level"].is_string());
+    assert!(tel["active_leases"].is_array());
+    let _ = std::fs::remove_file(&path);
+}

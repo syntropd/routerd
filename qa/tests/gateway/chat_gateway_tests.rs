@@ -55,6 +55,12 @@ async fn test_health_endpoint() {
     assert_eq!(json.get("status").unwrap(), "active");
     assert!(json.get("rss_mb").is_some());
     assert!(json.get("psi_level").is_some());
+    assert!(json.get("telemetry").is_some());
+    let tel = json.get("telemetry").unwrap();
+    assert!(tel.get("cpu").is_some());
+    assert!(tel.get("host_ram").is_some());
+    assert!(tel.get("gpus").is_some());
+    assert!(tel.get("active_leases").is_some());
 }
 
 #[tokio::test]
