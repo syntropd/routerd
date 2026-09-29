@@ -17,7 +17,9 @@ async fn start_daemon(tag: &str) -> PathBuf {
     let path = socket_path(tag);
     let listener = bind_or_create_listener(&path).unwrap();
     let engine = Arc::new(RouterEngine::new(RouterConfig::default()));
-    tokio::spawn(routerd_daemon::varlink::run_varlink_listener(listener, engine));
+    tokio::spawn(routerd_daemon::varlink::run_varlink_listener(
+        listener, engine,
+    ));
     // Give the accept loop a moment to start.
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     path
@@ -51,7 +53,10 @@ async fn service_answers_info_and_descriptions() {
         json!({"interface": "io.syntrop.Router1"}),
     )
     .await;
-    assert!(desc["parameters"]["description"].as_str().unwrap().contains("method GetStatus"));
+    assert!(desc["parameters"]["description"]
+        .as_str()
+        .unwrap()
+        .contains("method GetStatus"));
     let missing = call(
         &path,
         "org.varlink.service.GetInterfaceDescription",
@@ -71,7 +76,12 @@ async fn router1_reports_status_and_lists() {
     let providers = call(&path, "io.syntrop.Router1.ListProviders", json!({})).await;
     assert_eq!(providers["parameters"]["providers"], json!([]));
     let models = call(&path, "io.syntrop.Router1.ListModels", json!({})).await;
-    let ids: Vec<&str> = models["parameters"]["models"].as_array().unwrap().iter().filter_map(|m| m.as_str()).collect();
+    let ids: Vec<&str> = models["parameters"]["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m.as_str())
+        .collect();
     assert!(ids.contains(&"router:fast"));
     let _ = std::fs::remove_file(&path);
 }
@@ -108,3 +118,30 @@ async fn router1_handles_reload() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[tokio::test]
+async fn router1_handles_reload_with_files() {
+    let temp_models = tempfile::tempdir().unwrap();
+    let gguf_file = temp_models.path().join("qwen2.5.gguf");
+    std::fs::write(&gguf_file, b"dummy gguf content").unwrap();
+
+    std::env::set_var(
+        "SYNTROP_MODELS_GGUF_DIR",
+        temp_models.path().to_str().unwrap(),
+    );
+
+    let path = start_daemon("reload_files").await;
+    let res = call(&path, "io.syntrop.Router1.Reload", json!({})).await;
+    assert!(res["parameters"]["reloaded_models"].as_u64().unwrap() >= 1);
+
+    let models = call(&path, "io.syntrop.Router1.ListModels", json!({})).await;
+    let ids: Vec<&str> = models["parameters"]["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|m| m.as_str())
+        .collect();
+    assert!(ids.contains(&"qwen2.5"));
+
+    std::env::remove_var("SYNTROP_MODELS_GGUF_DIR");
+    let _ = std::fs::remove_file(&path);
+}

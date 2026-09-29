@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "be06599",
- "dirty": true,
+ "rev": "d6fef2e",
+ "dirty": false,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -453,8 +453,8 @@
   },
   {
    "path": "./crates/routerd-core/src/router/reload_models.rs",
-   "lines": 127,
-   "bin_bytes": 15396,
+   "lines": 158,
+   "bin_bytes": 15915,
    "heat_pct": null,
    "reach": 0
   },
@@ -677,7 +677,7 @@
   },
   {
    "path": "./qa/tests/daemon/router1_tests.rs",
-   "lines": 110,
+   "lines": 147,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

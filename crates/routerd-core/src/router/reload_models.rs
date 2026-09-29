@@ -26,8 +26,10 @@ impl RouterEngine {
     pub async fn reload_models(&self) -> Result<usize> {
         let mut model_names = HashSet::new();
 
-        // 1. Rescan /var/lib/models/gguf directory
-        let gguf_dir = Path::new(GGUF_MODELS_DIR);
+        // 1. Rescan /var/lib/models/gguf directory (or overridden via SYNTROP_MODELS_GGUF_DIR)
+        let gguf_dir_str = std::env::var("SYNTROP_MODELS_GGUF_DIR")
+            .unwrap_or_else(|_| GGUF_MODELS_DIR.to_string());
+        let gguf_dir = Path::new(&gguf_dir_str);
         if let Ok(mut dir) = tokio::fs::read_dir(gguf_dir).await {
             while let Ok(Some(entry)) = dir.next_entry().await {
                 let path = entry.path();
@@ -39,8 +41,10 @@ impl RouterEngine {
             }
         }
 
-        // 2. Query modeld Varlink List over domain socket
-        let modeld_sock = Path::new(MODELD_SOCKET);
+        // 2. Query modeld Varlink List over domain socket (or overridden via SYNTROP_MODELD_SOCKET)
+        let modeld_socket_str =
+            std::env::var("SYNTROP_MODELD_SOCKET").unwrap_or_else(|_| MODELD_SOCKET.to_string());
+        let modeld_sock = Path::new(&modeld_socket_str);
         if modeld_sock.exists() {
             if let Ok(Ok(stream)) = timeout(RPC_TIMEOUT, UnixStream::connect(modeld_sock)).await {
                 let (reader, mut writer) = stream.into_split();
@@ -51,10 +55,19 @@ impl RouterEngine {
 
                 if writer.write_all(&req_bytes).await.is_ok() {
                     let mut buf = Vec::new();
-                    if timeout(RPC_TIMEOUT, reader.read_until(0x00, &mut buf)).await.is_ok() {
-                        if buf.last() == Some(&0x00) { buf.pop(); }
+                    if timeout(RPC_TIMEOUT, reader.read_until(0x00, &mut buf))
+                        .await
+                        .is_ok()
+                    {
+                        if buf.last() == Some(&0x00) {
+                            buf.pop();
+                        }
                         if let Ok(reply) = serde_json::from_slice::<Value>(&buf) {
-                            if let Some(arr) = reply.get("parameters").and_then(|p| p.get("models")).and_then(|m| m.as_array()) {
+                            if let Some(arr) = reply
+                                .get("parameters")
+                                .and_then(|p| p.get("models"))
+                                .and_then(|m| m.as_array())
+                            {
                                 for m in arr {
                                     if let Some(id) = m.get("id").and_then(|v| v.as_str()) {
                                         model_names.insert(id.to_string());
@@ -72,7 +85,9 @@ impl RouterEngine {
 
         // 3. Upsert discovered models into local provider
         let mut providers = self.providers.write().await;
-        let mut local_entry = providers.values_mut().find(|p| is_local_provider(&p.config.kind, &p.config.base_url));
+        let mut local_entry = providers
+            .values_mut()
+            .find(|p| is_local_provider(&p.config.kind, &p.config.base_url));
 
         let count = if let Some(ref mut entry) = local_entry {
             for name in &model_names {
@@ -92,15 +107,18 @@ impl RouterEngine {
             entry.config.models.len()
         } else {
             // Create default local provider if none exists
-            let models: Vec<ProviderModelConfig> = model_names.into_iter().map(|name| ProviderModelConfig {
-                name,
-                max_context_tokens: 8192,
-                cost_per_input_token: 0.0,
-                cost_per_output_token: 0.0,
-                avg_latency_ms: 50.0,
-                tokens_per_second: 30.0,
-                tier: None,
-            }).collect();
+            let models: Vec<ProviderModelConfig> = model_names
+                .into_iter()
+                .map(|name| ProviderModelConfig {
+                    name,
+                    max_context_tokens: 8192,
+                    cost_per_input_token: 0.0,
+                    cost_per_output_token: 0.0,
+                    avg_latency_ms: 50.0,
+                    tokens_per_second: 30.0,
+                    tier: None,
+                })
+                .collect();
 
             let cfg = ProviderConfig {
                 id: "local".to_string(),
@@ -116,8 +134,21 @@ impl RouterEngine {
             };
             let count = cfg.models.len();
             let adapter = create_adapter(&cfg);
-            let stats = ProviderStats { is_healthy: true, consecutive_failures: 0, total_requests: 0, total_errors: 0, last_latency_ms: 50.0 };
-            providers.insert("local".to_string(), ProviderEntry { config: cfg, adapter, stats: Arc::new(RwLock::new(stats)) });
+            let stats = ProviderStats {
+                is_healthy: true,
+                consecutive_failures: 0,
+                total_requests: 0,
+                total_errors: 0,
+                last_latency_ms: 50.0,
+            };
+            providers.insert(
+                "local".to_string(),
+                ProviderEntry {
+                    config: cfg,
+                    adapter,
+                    stats: Arc::new(RwLock::new(stats)),
+                },
+            );
             count
         };
 
