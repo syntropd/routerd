@@ -162,3 +162,42 @@ async fn bridge_health_and_models_prefer_live_socket() {
     assert_eq!(adapter.list_models().await.unwrap(), vec!["live-a".to_string(), "live-b".to_string()]);
     let _ = std::fs::remove_file(&path);
 }
+
+#[tokio::test]
+async fn bridge_slow_stream_survives_snappy_configured_timeout() {
+    let path = socket_path("slow-stream");
+    let _ = std::fs::remove_file(&path);
+    let listener = UnixListener::bind(&path).unwrap();
+    tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let _ = read_frame(&mut stream).await;
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        write_frame(
+            &mut stream,
+            &json!({"parameters": {"chunk": "Slow "}, "continues": true}),
+        )
+        .await;
+        write_frame(
+            &mut stream,
+            &json!({"parameters": {"chunk": "stream."}, "continues": false}),
+        )
+        .await;
+    });
+
+    let mut config = cfg(&path);
+    config.timeout_ms = 300;
+    let adapter = create_adapter(&config);
+    let mut stream = adapter
+        .chat_completion_stream("local-qwen", &request())
+        .await
+        .expect("slow stream must survive the generate floor");
+    let mut text = String::new();
+    while let Some(item) = stream.next().await {
+        text.push_str(std::str::from_utf8(&item.unwrap()).unwrap());
+    }
+    assert!(text.contains("Slow "), "missing first chunk: {text}");
+    assert!(text.contains("stream."), "missing second chunk: {text}");
+    assert!(text.contains("data: [DONE]"), "missing terminator: {text}");
+    let _ = std::fs::remove_file(&path);
+}
+
