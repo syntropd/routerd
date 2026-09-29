@@ -6,11 +6,14 @@ use async_trait::async_trait;
 use std::path::PathBuf;
 use std::time::Duration;
 
+const MIN_GENERATE_TIMEOUT: Duration = Duration::from_secs(600);
+
 pub struct VarlinkBridgeAdapter {
     pub(super) id: String,
     pub(super) socket_path: PathBuf,
     pub(super) configured_models: Vec<String>,
     pub(super) timeout: Duration,
+    pub(super) generate_timeout: Duration,
 }
 
 impl VarlinkBridgeAdapter {
@@ -22,13 +25,14 @@ impl VarlinkBridgeAdapter {
         };
         let socket_path = PathBuf::from(p);
         let configured_models = cfg.models.iter().map(|m| m.name.clone()).collect();
-        let timeout = Duration::from_millis(cfg.timeout_ms.max(1000));
+        let hop = Duration::from_millis(cfg.timeout_ms.max(1000));
 
         Self {
             id: cfg.id.clone(),
             socket_path,
             configured_models,
-            timeout,
+            timeout: hop,
+            generate_timeout: hop.max(MIN_GENERATE_TIMEOUT),
         }
     }
 

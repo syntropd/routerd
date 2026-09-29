@@ -108,7 +108,16 @@ fn upsert_provider_models(
     }
 
     let local_table = if let Some(idx) = found_idx {
-        arr.get_mut(idx).unwrap()
+        let t = arr.get_mut(idx).unwrap();
+        let short_timeout = t
+            .get("timeout_ms")
+            .and_then(|v| v.as_integer())
+            .map(|ms| ms < 600000)
+            .unwrap_or(true);
+        if short_timeout {
+            t.insert("timeout_ms", Item::Value(Value::from(600000)));
+        }
+        t
     } else {
         let mut table = Table::new();
         table.insert("id", Item::Value(Value::from(id)));
@@ -118,7 +127,7 @@ fn upsert_provider_models(
         table.insert("tier", Item::Value(Value::from("fast")));
         table.insert("weight", Item::Value(Value::from(1.3)));
         table.insert("enabled", Item::Value(Value::from(enabled)));
-        table.insert("timeout_ms", Item::Value(Value::from(300000)));
+        table.insert("timeout_ms", Item::Value(Value::from(600000)));
         arr.push(table);
         let last_idx = arr.len() - 1;
         arr.get_mut(last_idx).unwrap()
@@ -188,7 +197,23 @@ fn test_upsert_runtimed_models() {
     assert!(s.contains("id = \"runtimed-local\""));
     assert!(s.contains("kind = \"runtimed\""));
     assert!(s.contains("/run/syntrop/io.syntrop.Runtime1"));
-    assert!(s.contains("timeout_ms = 300000"));
+    assert!(s.contains("timeout_ms = 600000"));
+}
+
+#[test]
+fn test_upsert_migrates_short_timeout() {
+    let mut doc = DocumentMut::new();
+    let mut arr = ArrayOfTables::new();
+    let mut legacy = Table::new();
+    legacy.insert("id", Item::Value(Value::from("runtimed-local")));
+    legacy.insert("timeout_ms", Item::Value(Value::from(10000)));
+    arr.push(legacy);
+    doc["providers"] = Item::ArrayOfTables(arr);
+
+    upsert_runtimed_models(&mut doc, &["m1".to_string()], true);
+    let s = doc.to_string();
+    assert!(s.contains("timeout_ms = 600000"));
+    assert!(!s.contains("timeout_ms = 10000"));
 }
 
 #[test]

@@ -13,7 +13,7 @@ use tokio::time::timeout;
 /// Cold model loads (gigabytes off disk) plus CPU decoding can take
 /// minutes. Completions always get at least this long, no matter how
 /// snappy the configured per-hop timeout is.
-const MIN_GENERATE_TIMEOUT: Duration = Duration::from_secs(300);
+const MIN_GENERATE_TIMEOUT: Duration = Duration::from_secs(600);
 
 pub struct RuntimedAdapter {
     pub(super) id: String,

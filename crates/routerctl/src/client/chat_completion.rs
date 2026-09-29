@@ -24,7 +24,7 @@ impl RouterctlClient {
             "stream": false
         });
         let http = HttpClient::builder()
-            .timeout(Duration::from_secs(300))
+            .timeout(Duration::from_secs(600))
             .build()
             .unwrap_or_default();
         let resp = http.post(&url).json(&body).send().await?;

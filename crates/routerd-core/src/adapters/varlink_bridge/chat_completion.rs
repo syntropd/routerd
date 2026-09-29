@@ -50,7 +50,7 @@ impl VarlinkBridgeAdapter {
 
         loop {
             buf.clear();
-            let n = timeout(self.timeout, reader.read_until(0, &mut buf))
+            let n = timeout(self.generate_timeout, reader.read_until(0, &mut buf))
                 .await
                 .map_err(|_| RouterError::Timeout("Varlink bridge read timed out".into()))?
                 .map_err(RouterError::Io)?;

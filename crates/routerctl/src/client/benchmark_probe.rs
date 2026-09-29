@@ -1,9 +1,10 @@
 use super::RouterctlClient;
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
+use reqwest::Client as HttpClient;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchmarkResult {
@@ -36,7 +37,11 @@ impl RouterctlClient {
             body["tier"] = json!(t);
         }
 
-        let resp = self.http_client.post(&url).json(&body).send().await?;
+        let http = HttpClient::builder()
+            .timeout(Duration::from_secs(600))
+            .build()
+            .unwrap_or_default();
+        let resp = http.post(&url).json(&body).send().await?;
 
         let status = resp.status();
         if !status.is_success() {

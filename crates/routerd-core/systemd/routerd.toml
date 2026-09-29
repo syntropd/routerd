@@ -42,8 +42,8 @@ base_url = "/run/syntrop/io.syntrop.Runtime1"
 tier = "fast"
 weight = 1.3
 enabled = false
-# Cold multi-GB loads take minutes; completions get at least 300s anyway.
-timeout_ms = 300000
+# Cold multi-GB loads take minutes; completions get at least 600s anyway.
+timeout_ms = 600000
 
 # 2. Local syntrop Varlink Bridge (Hardware Accelerated)
 [[providers]]

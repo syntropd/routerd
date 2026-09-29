@@ -50,7 +50,7 @@ impl VarlinkBridgeAdapter {
         let (tx, rx) = mpsc::channel::<Result<Bytes>>(32);
         let completion_id = format!("chatcmpl-varlink-{}", Uuid::new_v4());
         let model_str = target_model.to_string();
-        let stream_timeout = self.timeout;
+        let stream_timeout = self.generate_timeout;
 
         tokio::spawn(async move {
             let mut buf = Vec::with_capacity(512);
