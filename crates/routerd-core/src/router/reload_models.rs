@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 const GGUF_MODELS_DIR: &str = "/var/lib/models/gguf";
 const MODELD_SOCKET: &str = "/run/syntrop/io.syntrop.Model1";
