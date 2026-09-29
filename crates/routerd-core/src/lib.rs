@@ -5,13 +5,19 @@ pub mod adapters;
 pub mod config;
 pub mod credentials;
 pub mod error;
+pub mod mesh;
 pub mod models;
 pub mod router;
 pub mod scoring;
 pub mod telemetry;
+pub mod wire;
 
 pub use config::{DaemonConfig, ProviderConfig, RouterConfig, ThresholdsConfig, TierConfig};
 pub use error::{Result, RouterError};
+pub use mesh::{
+    chunk_prefill_tokens, CircuitBreaker, CircuitState, ClusterNode, ClusterTopology,
+    NodeRegistry, NodeStatus, PrefillReplayBuffer, PREFILL_CHUNK_SIZE,
+};
 pub use models::{
     ChatChoice, ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
     ModelItem, ModelListResponse, ProviderModelConfig, UsageInfo,
@@ -19,6 +25,10 @@ pub use models::{
 pub use router::{DaemonStatusInfo, ProviderStatusInfo, RouterEngine};
 pub use scoring::{CandidateProvider, RequestProfile, ScoredCandidate, ScoringEngine};
 pub use telemetry::{PressureLevel, PressureMetrics, TelemetryClient};
+pub use wire::{
+    configure_mesh_tcp, ScmpFrame, ScmpHeader, ScmpMessageType, HEADER_LEN, SCMP_MAGIC,
+    SCMP_VERSION,
+};
 
 /// Default router configuration template. Lives in this crate (not the
 /// repo root) so published packages stay self-contained: `cargo package`

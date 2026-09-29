@@ -27,6 +27,7 @@ reqwest = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 futures = { workspace = true }
+rustls = "0.23"
 
 [dev-dependencies]
 tempfile = "3.10"

@@ -25,6 +25,12 @@ pub async fn bind_standalone_tcp(addr: &str) -> Result<TcpListener> {
     Ok(listener)
 }
 
+pub async fn bind_cluster_mesh(addr: &str) -> Result<TcpListener> {
+    let listener = TcpListener::bind(addr).await?;
+    info!("SCMP cluster mesh listening on TCP {}", addr);
+    Ok(listener)
+}
+
 pub async fn serve_tcp_gateway<F>(
     listener: TcpListener,
     app: Router,
