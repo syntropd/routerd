@@ -21,6 +21,7 @@ pub struct RuntimedAdapter {
     pub(super) configured_models: Vec<String>,
     pub(super) timeout: Duration,
     pub(super) generate_timeout: Duration,
+    pub(super) link_latency_nanos: u64,
 }
 
 impl RuntimedAdapter {
@@ -37,10 +38,24 @@ impl RuntimedAdapter {
             configured_models: cfg.models.iter().map(|m| m.name.clone()).collect(),
             timeout: hop,
             generate_timeout: hop.max(MIN_GENERATE_TIMEOUT),
+            link_latency_nanos: 0,
         }
     }
 
+    pub fn with_link_latency(mut self, latency_nanos: u64) -> Self {
+        self.link_latency_nanos = latency_nanos;
+        self
+    }
+
     pub(super) fn compute_generate_timeout(&self, req: &ChatCompletionRequest) -> Duration {
+        self.compute_generate_timeout_with_latency(req, self.link_latency_nanos)
+    }
+
+    pub(super) fn compute_generate_timeout_with_latency(
+        &self,
+        req: &ChatCompletionRequest,
+        latency_nanos: u64,
+    ) -> Duration {
         let mut budget = self.generate_timeout;
         if let Some(effort) = req.reasoning_effort {
             let factor = match effort {
@@ -52,8 +67,13 @@ impl RuntimedAdapter {
             };
             budget = budget.mul_f64(factor);
         }
-        if let Some(tokens) = req.reasoning_budget() {
-            budget += Duration::from_millis((tokens as u64) * 80);
+        let tokens = req.reasoning_budget().unwrap_or(0) as u64;
+        if tokens > 0 {
+            // Adaptive scaling: baseline 80ms/token + link latency factor
+            let per_token_overhead_ms = 80 + (latency_nanos / 1_000_000);
+            budget += Duration::from_millis(tokens * per_token_overhead_ms);
+        } else if latency_nanos > 0 {
+            budget += Duration::from_nanos(latency_nanos.saturating_mul(1000));
         }
         budget.max(MIN_GENERATE_TIMEOUT)
     }
@@ -148,5 +168,54 @@ impl ProviderAdapter for RuntimedAdapter {
 
     async fn list_models(&self) -> Result<Vec<String>> {
         self.available_models().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_timeout_scales_with_effort_and_latency() {
+        let cfg = ProviderConfig {
+            id: "local-rt".into(),
+            name: "runtimed".into(),
+            kind: "runtimed".into(),
+            base_url: "varlink:/run/syntrop/test.sock".into(),
+            api_key: None,
+            timeout_ms: 1000,
+            weight: 1.0,
+            enabled: true,
+            tier: "fast".into(),
+            models: vec![],
+        };
+        let adapter = RuntimedAdapter::new(&cfg);
+        let mut req = ChatCompletionRequest {
+            model: "test".into(),
+            messages: vec![],
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            stream: None,
+            tier: None,
+            reasoning_budget: None,
+            max_thinking_tokens: None,
+            reasoning_content: None,
+            reasoning_effort: None,
+            extra: std::collections::HashMap::new(),
+        };
+
+        let t_base = adapter.compute_generate_timeout(&req);
+        assert_eq!(t_base, MIN_GENERATE_TIMEOUT);
+
+        req.reasoning_effort = Some(crate::models::ReasoningEffort::High);
+        let t_high = adapter.compute_generate_timeout(&req);
+        assert_eq!(t_high, MIN_GENERATE_TIMEOUT.mul_f64(2.0));
+
+        req.max_thinking_tokens = Some(2048);
+        let t_tokens_fast = adapter.compute_generate_timeout_with_latency(&req, 800);
+        let t_tokens_slow = adapter.compute_generate_timeout_with_latency(&req, 50_000_000);
+        assert!(t_tokens_slow > t_tokens_fast);
     }
 }

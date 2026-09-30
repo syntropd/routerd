@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "a1e3b6c",
+ "rev": "663f4d8",
  "dirty": true,
  "pages": [
   {
@@ -236,7 +236,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/engine_call.rs",
-   "lines": 152,
+   "lines": 221,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -446,7 +446,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/prepare_routing.rs",
-   "lines": 137,
+   "lines": 143,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -481,7 +481,7 @@
   },
   {
    "path": "./crates/routerd-core/src/scoring/interconnect_tests.rs",
-   "lines": 127,
+   "lines": 151,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

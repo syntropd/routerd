@@ -82,22 +82,28 @@ impl RouterEngine {
         );
 
         let local_beta = if hw_report.gpus.len() > 1 {
-            let mut beta = 0.50f64;
+            let mut min_beta = 1.0f64;
+            let mut found_links = false;
             for g in &hw_report.gpus {
                 if let Some(links) = &g.p2p_links {
                     for l in links {
+                        found_links = true;
                         let b = match l.link_type.as_str() {
                             "NVLink" => 1.0,
                             "PCIe" => 0.85,
                             _ => 0.50,
                         };
-                        if b > beta {
-                            beta = b;
+                        if b < min_beta {
+                            min_beta = b;
                         }
                     }
                 }
             }
-            Some(beta)
+            if found_links {
+                Some(min_beta)
+            } else {
+                Some(0.50)
+            }
         } else {
             Some(1.0)
         };

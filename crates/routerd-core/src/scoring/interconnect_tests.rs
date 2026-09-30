@@ -125,3 +125,27 @@ fn test_remote_candidate_no_penalty() {
     let scored = ScoringEngine::score_candidate(&req, &remote_cand, &tier_cfg, &thresholds);
     assert!(scored.reason.contains("ic_pen=0.0"));
 }
+
+#[test]
+fn test_weakest_link_bottleneck_penalty() {
+    let nvlink_cand = make_interconnect_candidate("nvlink-gang", Some(1.0));
+    let mixed_bottleneck_cand = make_interconnect_candidate("mixed-gang", Some(0.85));
+
+    let req = RequestProfile {
+        requested_model: "router:hard".to_string(),
+        requested_tier: "hard".to_string(),
+        estimated_prompt_tokens: 500,
+        estimated_output_tokens: 1000,
+        require_stream: false,
+        reasoning_effort: Some(ReasoningEffort::High),
+    };
+
+    let tier_cfg = TierConfig::default();
+    let thresholds = ThresholdsConfig::default();
+
+    let scored_nvlink = ScoringEngine::score_candidate(&req, &nvlink_cand, &tier_cfg, &thresholds);
+    let scored_bottleneck = ScoringEngine::score_candidate(&req, &mixed_bottleneck_cand, &tier_cfg, &thresholds);
+
+    assert!(scored_nvlink.total_score > scored_bottleneck.total_score);
+    assert!(scored_bottleneck.reason.contains("ic_pen=37.5"));
+}
