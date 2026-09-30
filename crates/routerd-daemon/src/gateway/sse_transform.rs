@@ -51,9 +51,9 @@ pub fn transform_sse_stream(mut input: ByteStream) -> ByteStream {
                 }
             };
             buffer.push_str(&String::from_utf8_lossy(&bytes));
-            while let Some(pos) = buffer.find("\n\n") {
+            while let Some((pos, len)) = find_sse_event_boundary(&buffer) {
                 let event = buffer[..pos].to_string();
-                buffer.drain(..pos + 2);
+                buffer.drain(..pos + len);
                 if !process_sse_event(&event, &mut filter, &tx).await {
                     return;
                 }
@@ -173,10 +173,28 @@ fn synthetic_chunk_line(item: FilteredItem) -> Option<String> {
     Some(format!("data: {}\n\n", serde_json::to_string(&val).ok()?))
 }
 
+fn find_sse_event_boundary(buf: &str) -> Option<(usize, usize)> {
+    let crlf = buf.find("\r\n\r\n").map(|p| (p, 4));
+    let lf = buf.find("\n\n").map(|p| (p, 2));
+    match (crlf, lf) {
+        (Some((p1, l1)), Some((p2, l2))) => Some(if p1 <= p2 { (p1, l1) } else { (p2, l2) }),
+        (Some(c), None) => Some(c),
+        (None, Some(l)) => Some(l),
+        (None, None) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use routerd_core::models::{ChatChoice, ChatMessage};
+
+    #[test]
+    fn test_find_sse_event_boundary() {
+        assert_eq!(find_sse_event_boundary("data: 1\n\ndata: 2"), Some((7, 2)));
+        assert_eq!(find_sse_event_boundary("data: 1\r\n\r\ndata: 2"), Some((7, 4)));
+        assert_eq!(find_sse_event_boundary("incomplete"), None);
+    }
 
     #[test]
     fn test_clean_completion_response_with_think() {

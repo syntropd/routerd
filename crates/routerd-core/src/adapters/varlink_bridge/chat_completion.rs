@@ -35,6 +35,9 @@ impl VarlinkBridgeAdapter {
         if let Some(budget) = request.reasoning_budget() {
             params["reasoning_budget"] = json!(budget);
         }
+        if let Some(effort) = request.reasoning_effort {
+            params["reasoning_effort"] = json!(effort.as_str());
+        }
 
         let req = json!({
             "method": "io.syntrop.Inference1.StreamInference",
@@ -98,15 +101,22 @@ impl VarlinkBridgeAdapter {
         let mut items = filter.process(&accumulated_text);
         items.extend(filter.flush());
         let mut clean_content = String::new();
+        let mut reasoning_content = String::new();
         for item in items {
-            if let crate::wire::FilteredItem::Content(c) = item {
-                clean_content.push_str(&c);
+            match item {
+                crate::wire::FilteredItem::Content(c) => clean_content.push_str(&c),
+                crate::wire::FilteredItem::Reasoning(r) => reasoning_content.push_str(&r),
             }
         }
-        let final_content = if clean_content.is_empty() && !accumulated_text.is_empty() {
+        let final_content = if clean_content.is_empty() && !accumulated_text.is_empty() && reasoning_content.is_empty() {
             accumulated_text
         } else {
             clean_content
+        };
+        let final_reasoning = if reasoning_content.is_empty() {
+            None
+        } else {
+            Some(reasoning_content)
         };
 
         let prompt_tok = request.estimate_prompt_tokens();
@@ -123,7 +133,7 @@ impl VarlinkBridgeAdapter {
                     role: "assistant".to_string(),
                     content: Value::String(final_content),
                     name: None,
-                    reasoning_content: None,
+                    reasoning_content: final_reasoning,
                 },
                 finish_reason: Some("stop".to_string()),
             }],

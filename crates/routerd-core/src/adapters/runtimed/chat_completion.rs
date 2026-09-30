@@ -112,22 +112,39 @@ impl RuntimedAdapter {
         request: &ChatCompletionRequest,
     ) -> Result<ByteStream> {
         let full = self.complete_chat(target_model, request).await?;
-        let text = full.choices.first().map(|c| c.message.content_as_str());
+        let first_choice = full.choices.first().cloned();
         let (tx, rx) = mpsc::channel::<Result<Bytes>>(4);
         let completion_id = full.id.clone();
         let model_str = target_model.to_string();
         let now = full.created;
         tokio::spawn(async move {
-            if let Some(text) = text {
-                let mut filter = crate::wire::ThinkFilter::new();
-                let mut items = filter.process(&text);
-                items.extend(filter.flush());
-                for (i, item) in items.into_iter().enumerate() {
-                    let (content, reasoning) = match item {
-                        crate::wire::FilteredItem::Content(c) => (Some(c), None),
-                        crate::wire::FilteredItem::Reasoning(r) => (None, Some(r)),
-                    };
-                    let chunk_obj = ChatCompletionChunk {
+            if let Some(choice) = first_choice {
+                let mut sent_role = false;
+                if let Some(reasoning) = choice.message.reasoning_content.as_deref() {
+                    if !reasoning.is_empty() {
+                        let chunk = ChatCompletionChunk {
+                            id: completion_id.clone(),
+                            object: "chat.completion.chunk".to_string(),
+                            created: now,
+                            model: model_str.clone(),
+                            choices: vec![ChunkChoice {
+                                index: 0,
+                                delta: ChunkDelta {
+                                    role: Some("assistant".to_string()),
+                                    content: None,
+                                    reasoning_content: Some(reasoning.to_string()),
+                                },
+                                finish_reason: None,
+                            }],
+                        };
+                        sent_role = true;
+                        let line = format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default());
+                        let _ = tx.send(Ok(Bytes::from(line))).await;
+                    }
+                }
+                let text = choice.message.content_as_str();
+                if !text.is_empty() {
+                    let chunk = ChatCompletionChunk {
                         id: completion_id.clone(),
                         object: "chat.completion.chunk".to_string(),
                         created: now,
@@ -135,18 +152,15 @@ impl RuntimedAdapter {
                         choices: vec![ChunkChoice {
                             index: 0,
                             delta: ChunkDelta {
-                                role: (i == 0).then(|| "assistant".to_string()),
-                                content,
-                                reasoning_content: reasoning,
+                                role: (!sent_role).then(|| "assistant".to_string()),
+                                content: Some(text),
+                                reasoning_content: None,
                             },
                             finish_reason: None,
                         }],
                     };
-                    let sse_line = format!(
-                        "data: {}\n\n",
-                        serde_json::to_string(&chunk_obj).unwrap_or_default()
-                    );
-                    let _ = tx.send(Ok(Bytes::from(sse_line))).await;
+                    let line = format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default());
+                    let _ = tx.send(Ok(Bytes::from(line))).await;
                 }
                 let final_chunk = ChatCompletionChunk {
                     id: completion_id,
@@ -160,14 +174,11 @@ impl RuntimedAdapter {
                             content: None,
                             reasoning_content: None,
                         },
-                        finish_reason: Some("stop".to_string()),
+                        finish_reason: choice.finish_reason.or_else(|| Some("stop".to_string())),
                     }],
                 };
-                let sse_line = format!(
-                    "data: {}\n\n",
-                    serde_json::to_string(&final_chunk).unwrap_or_default()
-                );
-                let _ = tx.send(Ok(Bytes::from(sse_line))).await;
+                let line = format!("data: {}\n\n", serde_json::to_string(&final_chunk).unwrap_or_default());
+                let _ = tx.send(Ok(Bytes::from(line))).await;
             }
             let _ = tx.send(Ok(Bytes::from("data: [DONE]\n\n"))).await;
         });
