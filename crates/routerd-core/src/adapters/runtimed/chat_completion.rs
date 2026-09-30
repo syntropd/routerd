@@ -135,25 +135,48 @@ impl RuntimedAdapter {
 
 /// Extracts tool calls from model output JSON if present (pure helper for testing and robustness).
 pub(crate) fn parse_tool_calls_from_content(final_content: &str) -> Option<Vec<crate::models::ToolCall>> {
-    let val = serde_json::from_str::<Value>(final_content).ok()?;
-    if let Some(calls) = val.get("tool_calls").and_then(|v| serde_json::from_value::<Vec<crate::models::ToolCall>>(v.clone()).ok()) {
-        Some(calls)
-    } else if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
-        let args = val
-            .get("arguments")
-            .map(|a| {
-                if a.is_string() {
-                    a.as_str().unwrap_or_default().to_string()
-                } else {
-                    a.to_string()
-                }
-            })
-            .unwrap_or_else(|| "{}".to_string());
-        let call_id = format!("call_{}", &Uuid::new_v4().to_string()[..8]);
-        Some(vec![crate::models::ToolCall::function(call_id, name, args)])
-    } else {
-        None
+    let trimmed = final_content.trim();
+    let unquoted = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```"))
+        .unwrap_or(trimmed);
+    let clean = unquoted.strip_suffix("```").unwrap_or(unquoted).trim();
+    let val = serde_json::from_str::<Value>(clean).ok()?;
+    let serialize_args = |raw: Option<&Value>| match raw {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Null) | None => "{}".to_string(),
+        Some(other) => other.to_string(),
+    };
+    if let Some(arr) = val.get("tool_calls").and_then(|v| v.as_array()) {
+        let mut calls = Vec::new();
+        for (idx, item) in arr.iter().enumerate() {
+            let func_val = item.get("function");
+            let name = func_val
+                .and_then(|f| f.get("name"))
+                .or_else(|| item.get("name"))
+                .and_then(|n| n.as_str())?;
+            let raw_args = func_val.and_then(|f| f.get("arguments")).or_else(|| item.get("arguments"));
+            let id = item.get("id").and_then(|i| i.as_str()).map(str::to_string)
+                .unwrap_or_else(|| format!("call_{}", &Uuid::new_v4().to_string()[..8]));
+            let call_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("function").to_string();
+            calls.push(crate::models::ToolCall {
+                index: Some(idx),
+                id: Some(id),
+                r#type: Some(call_type),
+                function: crate::models::FunctionCall {
+                    name: Some(name.to_string()),
+                    arguments: Some(serialize_args(raw_args)),
+                },
+            });
+        }
+        if !calls.is_empty() { return Some(calls); }
     }
+    if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
+        let args = serialize_args(val.get("arguments"));
+        let call_id = format!("call_{}", &Uuid::new_v4().to_string()[..8]);
+        return Some(vec![crate::models::ToolCall::function(call_id, name, args)]);
+    }
+    None
 }
 
 #[cfg(test)]
@@ -189,12 +212,35 @@ mod tests {
     }
 
     #[test]
+    fn parse_tool_calls_with_null_arguments() {
+        let json_str = r#"{"name": "fetch_weather", "arguments": null}"#;
+        let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call");
+        assert_eq!(calls[0].function.arguments.as_deref(), Some("{}"));
+    }
+
+    #[test]
     fn parse_tool_calls_standard_array() {
         let json_str = r#"{"tool_calls": [{"id": "call_abc", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}]}"#;
         let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call array");
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].id.as_deref(), Some("call_abc"));
         assert_eq!(calls[0].function.name.as_deref(), Some("lookup"));
+    }
+
+    #[test]
+    fn parse_tool_calls_array_with_object_arguments() {
+        let json_str = r#"{"tool_calls": [{"id": "call_abc", "type": "function", "function": {"name": "lookup", "arguments": {"city": "Honolulu"}}}]}"#;
+        let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call array with object args");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name.as_deref(), Some("lookup"));
+        assert!(calls[0].function.arguments.as_deref().unwrap_or_default().contains("Honolulu"));
+    }
+
+    #[test]
+    fn parse_tool_calls_markdown_fenced() {
+        let content = "```json\n{\"name\": \"fetch_weather\", \"arguments\": {\"city\": \"Honolulu\"}}\n```";
+        let calls = parse_tool_calls_from_content(content).expect("should parse fenced json");
+        assert_eq!(calls[0].function.name.as_deref(), Some("fetch_weather"));
     }
 
     #[test]
