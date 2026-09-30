@@ -102,6 +102,21 @@ impl RuntimedAdapter {
         } else {
             Some(reasoning_content)
         };
+        let mut tool_calls = None;
+        let mut finish_reason = finish.to_string();
+        if request.tools.as_ref().map_or(false, |t| !t.is_empty()) {
+            if let Ok(val) = serde_json::from_str::<Value>(&final_content) {
+                if let Some(calls) = val.get("tool_calls").and_then(|v| serde_json::from_value::<Vec<crate::models::ToolCall>>(v.clone()).ok()) {
+                    tool_calls = Some(calls);
+                    finish_reason = "tool_calls".to_string();
+                } else if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
+                    let args = val.get("arguments").map(|a| if a.is_string() { a.as_str().unwrap().to_string() } else { a.to_string() }).unwrap_or_else(|| "{}".to_string());
+                    let call_id = format!("call_{}", &Uuid::new_v4().to_string()[..8]);
+                    tool_calls = Some(vec![crate::models::ToolCall::function(call_id, name, args)]);
+                    finish_reason = "tool_calls".to_string();
+                }
+            }
+        }
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-runtimed-{}", Uuid::new_v4()),
             object: "chat.completion".to_string(),
@@ -114,11 +129,11 @@ impl RuntimedAdapter {
                     content: Value::String(final_content),
                     name: None,
                     reasoning_content: final_reasoning,
-                    tool_calls: None,
+                    tool_calls: tool_calls.clone(),
                     tool_call_id: None,
                 },
-                tool_calls: None,
-                finish_reason: Some(finish.to_string()),
+                tool_calls,
+                finish_reason: Some(finish_reason),
             }],
             usage: Some(UsageInfo {
                 prompt_tokens: prompt_tok,
@@ -167,7 +182,7 @@ impl RuntimedAdapter {
                     }
                 }
                 let text = choice.message.content_as_str();
-                if !text.is_empty() {
+                if !text.is_empty() || choice.tool_calls.is_some() {
                     let chunk = ChatCompletionChunk {
                         id: completion_id.clone(),
                         object: "chat.completion.chunk".to_string(),
@@ -177,11 +192,11 @@ impl RuntimedAdapter {
                             index: 0,
                             delta: ChunkDelta {
                                 role: (!sent_role).then(|| "assistant".to_string()),
-                                content: Some(text),
+                                content: if text.is_empty() { None } else { Some(text) },
                                 reasoning_content: None,
-                                tool_calls: None,
+                                tool_calls: choice.tool_calls.clone(),
                             },
-                            tool_calls: None,
+                            tool_calls: choice.tool_calls.clone(),
                             finish_reason: None,
                         }],
                     };

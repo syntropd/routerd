@@ -6,6 +6,7 @@ pub use super::tool_types::{FunctionCall, FunctionDefinition, ToolCall, ToolDefi
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
+    #[serde(default)]
     pub content: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -26,6 +27,17 @@ impl ChatMessage {
             reasoning_content: None,
             tool_calls: None,
             tool_call_id: None,
+        }
+    }
+
+    pub fn tool_response(tool_call_id: impl Into<String>, content: impl Into<Value>) -> Self {
+        Self {
+            role: "tool".into(),
+            content: content.into(),
+            name: None,
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.into()),
         }
     }
 

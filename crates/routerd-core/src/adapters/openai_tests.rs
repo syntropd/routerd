@@ -111,3 +111,53 @@ fn response_deserializes_tool_calls_into_chat_message() {
     assert_eq!(calls[0].function.name.as_deref(), Some("unit_status"));
 }
 
+#[test]
+fn payload_omits_empty_tools_and_dangling_tool_choice() {
+    let mut req = request();
+    req.tools = Some(vec![]);
+    req.tool_choice = Some(serde_json::json!("auto"));
+    let body = adapter("https://x/v1").build_payload("m", &req, false);
+    assert!(body.get("tools").is_none());
+    assert!(body.get("tool_choice").is_none());
+}
+
+#[test]
+fn response_deserializes_tool_calls_when_content_omitted() {
+    let raw = serde_json::json!({
+        "id": "chatcmpl-test2",
+        "object": "chat.completion",
+        "created": 12346,
+        "model": "gpt-4o",
+        "choices": [{
+            "index": 0,
+            "message": {
+                "role": "assistant",
+                "tool_calls": [{
+                    "id": "call_456",
+                    "type": "function",
+                    "function": {
+                        "name": "net_listeners",
+                        "arguments": "{}"
+                    }
+                }]
+            },
+            "finish_reason": "tool_calls"
+        }]
+    });
+    let parsed: crate::models::ChatCompletionResponse = serde_json::from_value(raw).unwrap();
+    assert_eq!(parsed.choices[0].message.role, "assistant");
+    assert!(parsed.choices[0].message.content.is_null());
+    assert_eq!(parsed.choices[0].message.content_as_str(), "");
+    let calls = parsed.choices[0].message.tool_calls.as_ref().unwrap();
+    assert_eq!(calls[0].id.as_deref(), Some("call_456"));
+}
+
+#[test]
+fn chat_message_tool_response_constructs_valid_message() {
+    let msg = ChatMessage::tool_response("call_123", "active");
+    assert_eq!(msg.role, "tool");
+    assert_eq!(msg.tool_call_id.as_deref(), Some("call_123"));
+    assert_eq!(msg.content_as_str(), "active");
+}
+
+

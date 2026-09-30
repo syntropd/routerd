@@ -88,8 +88,10 @@ impl OpenAICompatibleAdapter {
         if let Some(max_tokens) = req.max_tokens { body["max_tokens"] = json!(max_tokens); }
         if let Some(max_completion) = req.max_completion_tokens { body["max_completion_tokens"] = json!(max_completion); }
         if let Some(effort) = req.reasoning_effort { body["reasoning_effort"] = json!(effort.as_str()); }
-        if let Some(tools) = &req.tools { body["tools"] = json!(tools); }
-        if let Some(choice) = &req.tool_choice { body["tool_choice"] = choice.clone(); }
+        if let Some(tools) = &req.tools.as_ref().filter(|t| !t.is_empty()) {
+            body["tools"] = json!(tools);
+            if let Some(choice) = &req.tool_choice { body["tool_choice"] = choice.clone(); }
+        }
         for (k, v) in &req.extra {
             if k != "model" && k != "messages" && k != "stream" && k != "tier" && k != "reasoning_effort" && k != "tools" && k != "tool_choice" {
                 body[k] = v.clone();
