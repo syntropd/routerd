@@ -155,16 +155,29 @@ impl ScoringEngine {
         }
         health_penalty += cand.recent_failures as f64 * 15.0;
 
-        // 7. Base Weighted Score
+        // 7. Interconnect Penalty for Deep Reasoning (penalize non-NVLink multi-GPU interconnects)
+        let mut interconnect_penalty = 0.0f64;
+        if let Some(effort) = req.reasoning_effort {
+            if matches!(effort, crate::models::ReasoningEffort::High | crate::models::ReasoningEffort::Max) {
+                if let Some(beta) = cand.beta_link {
+                    interconnect_penalty = 250.0 * (1.0 - beta.clamp(0.0, 1.0));
+                }
+            }
+        }
+
+        // 8. Base Weighted Score
         let raw_score = (tier_cfg.latency_weight * speed_score)
             + (tier_cfg.cost_weight * cost_score)
             + (tier_cfg.capability_weight * capability_score);
 
-        let total_score = (raw_score * cand.provider_weight) - telemetry_penalty - health_penalty;
+        let total_score = (raw_score * cand.provider_weight)
+            - telemetry_penalty
+            - health_penalty
+            - interconnect_penalty;
 
         let reason = format!(
-            "speed={:.1}, cost={:.1}, cap={:.1}, weight={:.2}, psi_pen={:.1}, fail_pen={:.1}",
-            speed_score, cost_score, capability_score, cand.provider_weight, telemetry_penalty, health_penalty
+            "speed={:.1}, cost={:.1}, cap={:.1}, weight={:.2}, psi_pen={:.1}, fail_pen={:.1}, ic_pen={:.1}",
+            speed_score, cost_score, capability_score, cand.provider_weight, telemetry_penalty, health_penalty, interconnect_penalty
         );
 
         ScoredCandidate {

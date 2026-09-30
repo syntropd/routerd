@@ -40,13 +40,19 @@ impl HardwareTelemetryClient {
             }
         }
 
-        let (topo_res, leases_res, load_res) = tokio::join!(
+        let (topo_res, leases_res, comp_leases_res, load_res) = tokio::join!(
             Self::query_varlink_call(&self.inferenced_socket, "io.syntrop.Inference1.GetTopology"),
             Self::query_varlink_call(&self.inferenced_socket, "io.syntrop.Inference1.ListLeases"),
+            Self::query_varlink_call(&self.inferenced_socket, "io.syntrop.Inference1.ListCompositeLeases"),
             Self::query_varlink_call(&self.runtimed_socket, "io.syntrop.Runtime1.GetLoad"),
         );
 
-        let report = Self::assemble_report(topo_res.ok(), leases_res.ok(), load_res.ok());
+        let report = Self::assemble_report(
+            topo_res.ok(),
+            leases_res.ok(),
+            comp_leases_res.ok(),
+            load_res.ok(),
+        );
 
         {
             let mut guard = self.cache.write().await;
@@ -100,6 +106,7 @@ impl HardwareTelemetryClient {
     fn assemble_report(
         topo_val: Option<Value>,
         leases_val: Option<Value>,
+        comp_leases_val: Option<Value>,
         load_val: Option<Value>,
     ) -> HardwareTelemetryReport {
         let psi = super::TelemetryClient::read_kernel_or_simulated_psi();
@@ -107,6 +114,7 @@ impl HardwareTelemetryClient {
         let mut host_ram = HostRamTelemetry::default();
         let mut cpu = CpuMatrixTelemetry::default();
         let mut active_leases = Vec::new();
+        let mut composite_leases = Vec::new();
 
         if let Some(t) = topo_val {
             if let Some(planes) = t.get("planes").and_then(|p| p.as_array()) {
@@ -117,6 +125,8 @@ impl HardwareTelemetryClient {
                     let total_mem = p.get("total_memory").and_then(|v| v.as_u64()).unwrap_or(0);
                     let avail_mem = p.get("available_memory").and_then(|v| v.as_u64()).unwrap_or(0);
                     let used_mem = total_mem.saturating_sub(avail_mem);
+                    let kernel_used_memory = p.get("kernel_used_memory").and_then(|v| v.as_u64()).unwrap_or(0);
+                    let p2p_links = p.get("p2p_links").and_then(|v| serde_json::from_value(v.clone()).ok());
                     let features = p
                         .get("features")
                         .and_then(|v| v.as_array())
@@ -138,6 +148,8 @@ impl HardwareTelemetryClient {
                             used_vram_bytes: used_mem,
                             available_vram_bytes: avail_mem,
                             features,
+                            p2p_links,
+                            kernel_used_memory,
                         });
                     }
                 }
@@ -176,6 +188,30 @@ impl HardwareTelemetryClient {
             }
         }
 
+        if let Some(cl) = comp_leases_val {
+            let key = if cl.get("composite_leases").is_some() { "composite_leases" } else { "leases" };
+            if let Some(arr) = cl.get(key).and_then(|v| v.as_array()) {
+                for item in arr {
+                    let slices = item.get("slices").and_then(|v| v.as_array()).map(|s_arr| {
+                        s_arr.iter().map(|s| CompositeSliceTelemetry {
+                            plane_id: s.get("plane_id").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                            allocated_memory: s.get("allocated_memory").and_then(|v| v.as_u64()).unwrap_or(0),
+                            device_path: s.get("device_path").and_then(|v| v.as_str()).map(|x| x.to_string()),
+                        }).collect()
+                    }).unwrap_or_default();
+                    let id = item.get("lease_id").or_else(|| item.get("id")).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                    composite_leases.push(CompositeLeaseTelemetry {
+                        id,
+                        slices,
+                        priority: item.get("priority").and_then(|v| v.as_str()).unwrap_or("Interactive").to_string(),
+                        state: item.get("state").and_then(|v| v.as_str()).unwrap_or("Active").to_string(),
+                        client_unit: item.get("client_unit").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                        client_pid: item.get("client_pid").and_then(|v| v.as_u64()).map(|u| u as u32),
+                    });
+                }
+            }
+        }
+
         let runtime_load = load_val.map(|lv| RuntimeLoadTelemetry {
             available_slots: lv.get("available_slots").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
             max_slots: lv.get("max_slots").and_then(|v| v.as_u64()).unwrap_or(0) as usize,
@@ -190,6 +226,7 @@ impl HardwareTelemetryClient {
             psi_level: format!("{:?}", psi.level),
             psi_memory_some: psi.memory_some_avg10,
             active_leases,
+            composite_leases,
             runtime_load,
         }
     }

@@ -1,5 +1,14 @@
 use serde::{Deserialize, Serialize};
 
+/// Point-to-point interconnect telemetry between compute planes.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct DeviceLinkTelemetry {
+    pub peer_plane_id: String,
+    pub link_type: String,
+    pub bandwidth_bytes_sec: u64,
+    pub latency_nanos: u64,
+}
+
 /// DRM GPU VRAM allocation and feature telemetry from inferenced.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct DrmGpuTelemetry {
@@ -9,6 +18,10 @@ pub struct DrmGpuTelemetry {
     pub used_vram_bytes: u64,
     pub available_vram_bytes: u64,
     pub features: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p2p_links: Option<Vec<DeviceLinkTelemetry>>,
+    #[serde(default)]
+    pub kernel_used_memory: u64,
 }
 
 /// Host system RAM utilization telemetry.
@@ -41,6 +54,28 @@ pub struct ComputeLeaseTelemetry {
     pub client_pid: Option<u32>,
 }
 
+/// Individual slice allocation in a composite lease.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CompositeSliceTelemetry {
+    pub plane_id: String,
+    pub allocated_memory: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_path: Option<String>,
+}
+
+/// Active composite compute lease across multiple devices from inferenced.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct CompositeLeaseTelemetry {
+    pub id: String,
+    pub slices: Vec<CompositeSliceTelemetry>,
+    pub priority: String,
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_unit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_pid: Option<u32>,
+}
+
 /// Concurrent execution load and memory from runtimed.
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RuntimeLoadTelemetry {
@@ -59,6 +94,8 @@ pub struct HardwareTelemetryReport {
     pub psi_level: String,
     pub psi_memory_some: f32,
     pub active_leases: Vec<ComputeLeaseTelemetry>,
+    #[serde(default)]
+    pub composite_leases: Vec<CompositeLeaseTelemetry>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub runtime_load: Option<RuntimeLoadTelemetry>,
 }
@@ -77,6 +114,8 @@ mod tests {
                 used_vram_bytes: 4 * 1024 * 1024 * 1024,
                 available_vram_bytes: 12 * 1024 * 1024 * 1024,
                 features: vec!["vulkan".to_string(), "oneapi".to_string()],
+                p2p_links: None,
+                kernel_used_memory: 0,
             }],
             host_ram: HostRamTelemetry {
                 total_bytes: 32 * 1024 * 1024 * 1024,
@@ -94,6 +133,18 @@ mod tests {
                 id: "lease-1".to_string(),
                 plane_id: "renderD128".to_string(),
                 allocated_memory: 1024,
+                priority: "Interactive".to_string(),
+                state: "Active".to_string(),
+                client_unit: None,
+                client_pid: None,
+            }],
+            composite_leases: vec![CompositeLeaseTelemetry {
+                id: "comp-1".to_string(),
+                slices: vec![CompositeSliceTelemetry {
+                    plane_id: "renderD128".to_string(),
+                    allocated_memory: 1024,
+                    device_path: Some("/dev/dri/renderD128".to_string()),
+                }],
                 priority: "Interactive".to_string(),
                 state: "Active".to_string(),
                 client_unit: None,

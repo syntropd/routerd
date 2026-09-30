@@ -25,6 +25,7 @@ fn sample_candidate(id: &str, tier: &str, cost: f64, latency: f64, max_ctx: usiz
         },
         psi_level: PressureLevel::Normal,
         psi_memory_some: 0.0,
+        beta_link: None,
     }
 }
 
@@ -37,6 +38,7 @@ fn test_context_limit_disqualification() {
         estimated_prompt_tokens: 800,
         estimated_output_tokens: 400,
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig::default();
     let thresholds = ThresholdsConfig::default();
@@ -56,6 +58,7 @@ fn test_fast_tier_prefers_speed() {
         estimated_prompt_tokens: 200,
         estimated_output_tokens: 200,
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig {
         name: "fast".to_string(),
@@ -82,6 +85,7 @@ fn test_tier_default_model_pins_first() {
         estimated_prompt_tokens: 200,
         estimated_output_tokens: 200,
         require_stream: false,
+        reasoning_effort: None,
     };
     let thresholds = ThresholdsConfig::default();
 
@@ -140,6 +144,7 @@ fn test_hard_tier_prefers_capability() {
         estimated_prompt_tokens: 500,
         estimated_output_tokens: 1000,
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig {
         name: "hard".to_string(),
@@ -170,6 +175,7 @@ fn test_min_tokens_per_second_disqualification() {
         estimated_prompt_tokens: 100,
         estimated_output_tokens: 100,
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig::default();
     let thresholds = ThresholdsConfig {

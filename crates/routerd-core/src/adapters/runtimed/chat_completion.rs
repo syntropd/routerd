@@ -41,8 +41,9 @@ impl RuntimedAdapter {
         if let Some(effort) = request.reasoning_effort {
             params["reasoning_effort"] = json!(effort.as_str());
         }
+        let gen_timeout = self.compute_generate_timeout(request);
         let parameters = self
-            .call_with_timeout("io.syntrop.Runtime1.Generate", params, self.generate_timeout)
+            .call_with_timeout("io.syntrop.Runtime1.Generate", params, gen_timeout)
             .await?;
         let result = parameters.get("result").cloned().unwrap_or(Value::Null);
         let text = result.get("text").and_then(|t| t.as_str()).unwrap_or("");

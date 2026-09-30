@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "2016bf7",
+ "rev": "a1e3b6c",
  "dirty": true,
  "pages": [
   {
@@ -57,7 +57,7 @@
    "lines": 72,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 27
+   "reach": 29
   },
   {
    "path": "./crates/routerctl/src/commands/catalog/mod.rs",
@@ -229,14 +229,14 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 195,
+   "lines": 196,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/engine_call.rs",
-   "lines": 134,
+   "lines": 152,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -446,7 +446,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/prepare_routing.rs",
-   "lines": 109,
+   "lines": 137,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -474,14 +474,21 @@
   },
   {
    "path": "./crates/routerd-core/src/scoring/candidate.rs",
-   "lines": 31,
+   "lines": 32,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
+   "path": "./crates/routerd-core/src/scoring/interconnect_tests.rs",
+   "lines": 127,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
    "path": "./crates/routerd-core/src/scoring/mod.rs",
-   "lines": 10,
+   "lines": 12,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -495,28 +502,28 @@
   },
   {
    "path": "./crates/routerd-core/src/scoring/request_profile.rs",
-   "lines": 52,
+   "lines": 55,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/scoring/score_candidate.rs",
-   "lines": 191,
+   "lines": 204,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/scoring/scoring_tests.rs",
-   "lines": 236,
+   "lines": 242,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/telemetry/hardware_types.rs",
-   "lines": 114,
+   "lines": 165,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
@@ -537,7 +544,7 @@
   },
   {
    "path": "./crates/routerd-core/src/telemetry/query_hardware.rs",
-   "lines": 210,
+   "lines": 247,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -796,7 +803,7 @@
   },
   {
    "path": "./qa/tests/routing/scoring_tests.rs",
-   "lines": 213,
+   "lines": 219,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

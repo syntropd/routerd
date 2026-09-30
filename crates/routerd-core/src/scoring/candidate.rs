@@ -15,6 +15,7 @@ pub struct CandidateProvider {
     pub model: ProviderModelConfig,
     pub psi_level: PressureLevel,
     pub psi_memory_some: f32,
+    pub beta_link: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

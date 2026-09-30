@@ -1,4 +1,4 @@
-use crate::models::ChatCompletionRequest;
+use crate::models::{ChatCompletionRequest, ReasoningEffort};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -8,6 +8,8 @@ pub struct RequestProfile {
     pub estimated_prompt_tokens: usize,
     pub estimated_output_tokens: usize,
     pub require_stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<ReasoningEffort>,
 }
 
 impl RequestProfile {
@@ -43,6 +45,7 @@ impl RequestProfile {
             estimated_prompt_tokens: prompt_tokens,
             estimated_output_tokens: output_tokens,
             require_stream: req.stream.unwrap_or(false),
+            reasoning_effort: req.reasoning_effort,
         }
     }
 

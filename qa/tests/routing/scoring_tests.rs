@@ -31,6 +31,7 @@ fn make_candidate(
         },
         psi_level: PressureLevel::Normal,
         psi_memory_some: 0.0,
+        beta_link: None,
     }
 }
 
@@ -43,6 +44,7 @@ fn test_context_limit_enforcement() {
         estimated_prompt_tokens: 3000,
         estimated_output_tokens: 2000, // 5000 total > 4096 limit
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig::default();
     let thresholds = ThresholdsConfig::default();
@@ -62,6 +64,7 @@ fn test_fast_tier_scoring() {
         estimated_prompt_tokens: 500,
         estimated_output_tokens: 500,
         require_stream: false,
+        reasoning_effort: None,
     };
 
     let tier_cfg = TierConfig {
@@ -95,6 +98,7 @@ fn test_hard_tier_scoring() {
         estimated_prompt_tokens: 1000,
         estimated_output_tokens: 2000,
         require_stream: false,
+        reasoning_effort: None,
     };
 
     let tier_cfg = TierConfig {
@@ -128,6 +132,7 @@ fn test_psi_telemetry_penalty_on_local() {
         estimated_prompt_tokens: 200,
         estimated_output_tokens: 200,
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig::default();
     let thresholds = ThresholdsConfig::default();
@@ -158,6 +163,7 @@ fn test_min_tokens_per_second_threshold_disqualification() {
         estimated_prompt_tokens: 200,
         estimated_output_tokens: 200,
         require_stream: false,
+        reasoning_effort: None,
     };
     let tier_cfg = TierConfig::default();
     let thresholds = ThresholdsConfig {

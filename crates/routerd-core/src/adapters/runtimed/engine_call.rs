@@ -40,6 +40,24 @@ impl RuntimedAdapter {
         }
     }
 
+    pub(super) fn compute_generate_timeout(&self, req: &ChatCompletionRequest) -> Duration {
+        let mut budget = self.generate_timeout;
+        if let Some(effort) = req.reasoning_effort {
+            let factor = match effort {
+                crate::models::ReasoningEffort::Max => 3.0,
+                crate::models::ReasoningEffort::High => 2.0,
+                crate::models::ReasoningEffort::Medium => 1.5,
+                crate::models::ReasoningEffort::Low => 1.2,
+                crate::models::ReasoningEffort::None => 1.0,
+            };
+            budget = budget.mul_f64(factor);
+        }
+        if let Some(tokens) = req.reasoning_budget() {
+            budget += Duration::from_millis((tokens as u64) * 80);
+        }
+        budget.max(MIN_GENERATE_TIMEOUT)
+    }
+
     pub(super) fn extract_user_prompt(req: &ChatCompletionRequest) -> String {
         let mut prompt = String::new();
         for msg in &req.messages {

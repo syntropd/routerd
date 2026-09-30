@@ -76,7 +76,32 @@ impl RouterEngine {
         let tier_cfg = cfg.get_tier_config(&req_profile.requested_tier);
         let thresholds = cfg.thresholds.clone();
 
-        let psi = self.telemetry.get_pressure().await;
+        let (psi, hw_report) = tokio::join!(
+            self.telemetry.get_pressure(),
+            self.hardware_telemetry.get_report(),
+        );
+
+        let local_beta = if hw_report.gpus.len() > 1 {
+            let mut beta = 0.50f64;
+            for g in &hw_report.gpus {
+                if let Some(links) = &g.p2p_links {
+                    for l in links {
+                        let b = match l.link_type.as_str() {
+                            "NVLink" => 1.0,
+                            "PCIe" => 0.85,
+                            _ => 0.50,
+                        };
+                        if b > beta {
+                            beta = b;
+                        }
+                    }
+                }
+            }
+            Some(beta)
+        } else {
+            Some(1.0)
+        };
+
         let mut candidates = Vec::new();
 
         let p_map = self.providers.read().await;
@@ -86,6 +111,8 @@ impl RouterEngine {
                 continue;
             }
             let stats = entry.stats.read().await.clone();
+            let is_local = entry.config.kind == "varlink" || entry.config.id.contains("local");
+            let beta_link = if is_local { local_beta } else { None };
 
             for m in &entry.config.models {
                 candidates.push(CandidateProvider {
@@ -100,6 +127,7 @@ impl RouterEngine {
                     model: m.clone(),
                     psi_level: psi.level,
                     psi_memory_some: psi.memory_some_avg10,
+                    beta_link,
                 });
             }
         }
