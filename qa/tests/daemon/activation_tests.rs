@@ -63,15 +63,11 @@ fn test_socket_activation_adoption_child_process() {
             let key_cstr = std::ffi::CString::new("LISTEN_PID").unwrap();
             libc::setenv(key_cstr.as_ptr(), pid_cstr.as_ptr(), 1);
 
-            if tcp_fd != SD_LISTEN_FDS_START {
-                if libc::dup2(tcp_fd, SD_LISTEN_FDS_START) < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+            if tcp_fd != SD_LISTEN_FDS_START && libc::dup2(tcp_fd, SD_LISTEN_FDS_START) < 0 {
+                return Err(std::io::Error::last_os_error());
             }
-            if unix_fd != SD_LISTEN_FDS_START + 1 {
-                if libc::dup2(unix_fd, SD_LISTEN_FDS_START + 1) < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
+            if unix_fd != SD_LISTEN_FDS_START + 1 && libc::dup2(unix_fd, SD_LISTEN_FDS_START + 1) < 0 {
+                return Err(std::io::Error::last_os_error());
             }
 
             libc::fcntl(SD_LISTEN_FDS_START, libc::F_SETFD, 0);
@@ -162,10 +158,8 @@ fn test_socket_activation_dual_stack_and_dual_unix() {
             ];
 
             for (src, dst) in target_fds {
-                if src != dst {
-                    if libc::dup2(src, dst) < 0 {
-                        return Err(std::io::Error::last_os_error());
-                    }
+                if src != dst && libc::dup2(src, dst) < 0 {
+                    return Err(std::io::Error::last_os_error());
                 }
                 libc::fcntl(dst, libc::F_SETFD, 0);
             }

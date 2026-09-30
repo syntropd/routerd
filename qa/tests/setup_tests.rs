@@ -102,18 +102,16 @@ fn test_setup_enumerates_from_live_server() {
     let port = listener.local_addr().unwrap().port();
     let server = std::thread::spawn(move || {
         use std::io::{Read, Write};
-        for stream in listener.incoming().take(1) {
-            if let Ok(mut s) = stream {
-                let mut buf = [0u8; 4096];
-                let _ = s.read(&mut buf);
-                let body = r#"{"data":[{"id":"mock-a"},{"id":"mock-b"}]}"#;
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = s.write_all(resp.as_bytes());
-            }
+        for mut s in listener.incoming().take(1).flatten() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let body = r#"{"data":[{"id":"mock-a"},{"id":"mock-b"}]}"#;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = s.write_all(resp.as_bytes());
         }
     });
     let (_dir, cfg, models) = temp_paths("live");
@@ -196,18 +194,16 @@ fn test_default_command_roundtrip() {
     let port = listener.local_addr().unwrap().port();
     let server = std::thread::spawn(move || {
         use std::io::{Read, Write};
-        for stream in listener.incoming().take(1) {
-            if let Ok(mut s) = stream {
-                let mut buf = [0u8; 4096];
-                let _ = s.read(&mut buf);
-                let body = r#"{"data":[{"id":"mock-a"},{"id":"mock-b"}]}"#;
-                let resp = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                    body.len(),
-                    body
-                );
-                let _ = s.write_all(resp.as_bytes());
-            }
+        for mut s in listener.incoming().take(1).flatten() {
+            let mut buf = [0u8; 4096];
+            let _ = s.read(&mut buf);
+            let body = r#"{"data":[{"id":"mock-a"},{"id":"mock-b"}]}"#;
+            let resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                body.len(),
+                body
+            );
+            let _ = s.write_all(resp.as_bytes());
         }
     });
     let (_dir, cfg, models) = temp_paths("defcmd");

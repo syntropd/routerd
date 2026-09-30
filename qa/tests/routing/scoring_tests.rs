@@ -196,7 +196,7 @@ fn test_min_tokens_per_second_threshold_disqualification() {
     // select_best verifies RouterError::NoHealthyProvider when all candidate providers are slow
     let all_slow_res = ScoringEngine::select_best(
         &req,
-        &[slow_cand.clone()],
+        std::slice::from_ref(&slow_cand),
         &tier_cfg,
         &thresholds,
     );

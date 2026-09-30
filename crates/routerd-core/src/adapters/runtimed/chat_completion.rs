@@ -1,15 +1,10 @@
 use super::RuntimedAdapter;
-use crate::adapters::ByteStream;
 use crate::error::Result;
 use crate::models::{
-    ChatChoice, ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
-    ChunkChoice, ChunkDelta, UsageInfo,
+    ChatChoice, ChatCompletionRequest, ChatCompletionResponse, ChatMessage, UsageInfo,
 };
-use bytes::Bytes;
 use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -106,16 +101,9 @@ impl RuntimedAdapter {
         let mut tool_calls = None;
         let mut finish_reason = finish.to_string();
         if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {
-            if let Ok(val) = serde_json::from_str::<Value>(&final_content) {
-                if let Some(calls) = val.get("tool_calls").and_then(|v| serde_json::from_value::<Vec<crate::models::ToolCall>>(v.clone()).ok()) {
-                    tool_calls = Some(calls);
-                    finish_reason = "tool_calls".to_string();
-                } else if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
-                    let args = val.get("arguments").map(|a| if a.is_string() { a.as_str().unwrap().to_string() } else { a.to_string() }).unwrap_or_else(|| "{}".to_string());
-                    let call_id = format!("call_{}", &Uuid::new_v4().to_string()[..8]);
-                    tool_calls = Some(vec![crate::models::ToolCall::function(call_id, name, args)]);
-                    finish_reason = "tool_calls".to_string();
-                }
+            if let Some(calls) = parse_tool_calls_from_content(&final_content) {
+                tool_calls = Some(calls);
+                finish_reason = "tool_calls".to_string();
             }
         }
         Ok(ChatCompletionResponse {
@@ -143,89 +131,79 @@ impl RuntimedAdapter {
             }),
         })
     }
+}
 
-    pub(super) async fn stream_chat(
-        &self,
-        target_model: &str,
-        request: &ChatCompletionRequest,
-    ) -> Result<ByteStream> {
-        let full = self.complete_chat(target_model, request).await?;
-        let first_choice = full.choices.first().cloned();
-        let (tx, rx) = mpsc::channel::<Result<Bytes>>(4);
-        let completion_id = full.id.clone();
-        let model_str = target_model.to_string();
-        let now = full.created;
-        tokio::spawn(async move {
-            if let Some(choice) = first_choice {
-                let mut sent_role = false;
-                if let Some(reasoning) = choice.message.reasoning_content.as_deref() {
-                    if !reasoning.is_empty() {
-                        let chunk = ChatCompletionChunk {
-                            id: completion_id.clone(),
-                            object: "chat.completion.chunk".to_string(),
-                            created: now,
-                            model: model_str.clone(),
-                            choices: vec![ChunkChoice {
-                                index: 0,
-                                delta: ChunkDelta {
-                                    role: Some("assistant".to_string()),
-                                    content: None,
-                                    reasoning_content: Some(reasoning.to_string()),
-                                    tool_calls: None,
-                                },
-                                tool_calls: None,
-                                finish_reason: None,
-                            }],
-                        };
-                        sent_role = true;
-                        let line = format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default());
-                        let _ = tx.send(Ok(Bytes::from(line))).await;
-                    }
+/// Extracts tool calls from model output JSON if present (pure helper for testing and robustness).
+pub(crate) fn parse_tool_calls_from_content(final_content: &str) -> Option<Vec<crate::models::ToolCall>> {
+    let val = serde_json::from_str::<Value>(final_content).ok()?;
+    if let Some(calls) = val.get("tool_calls").and_then(|v| serde_json::from_value::<Vec<crate::models::ToolCall>>(v.clone()).ok()) {
+        Some(calls)
+    } else if let Some(name) = val.get("name").and_then(|v| v.as_str()) {
+        let args = val
+            .get("arguments")
+            .map(|a| {
+                if a.is_string() {
+                    a.as_str().unwrap_or_default().to_string()
+                } else {
+                    a.to_string()
                 }
-                let text = choice.message.content_as_str();
-                if !text.is_empty() || choice.tool_calls.is_some() {
-                    let chunk = ChatCompletionChunk {
-                        id: completion_id.clone(),
-                        object: "chat.completion.chunk".to_string(),
-                        created: now,
-                        model: model_str.clone(),
-                        choices: vec![ChunkChoice {
-                            index: 0,
-                            delta: ChunkDelta {
-                                role: (!sent_role).then(|| "assistant".to_string()),
-                                content: if text.is_empty() { None } else { Some(text) },
-                                reasoning_content: None,
-                                tool_calls: choice.tool_calls.clone(),
-                            },
-                            tool_calls: choice.tool_calls.clone(),
-                            finish_reason: None,
-                        }],
-                    };
-                    let line = format!("data: {}\n\n", serde_json::to_string(&chunk).unwrap_or_default());
-                    let _ = tx.send(Ok(Bytes::from(line))).await;
-                }
-                let final_chunk = ChatCompletionChunk {
-                    id: completion_id,
-                    object: "chat.completion.chunk".to_string(),
-                    created: now,
-                    model: model_str,
-                    choices: vec![ChunkChoice {
-                        index: 0,
-                        delta: ChunkDelta {
-                            role: None,
-                            content: None,
-                            reasoning_content: None,
-                            tool_calls: None,
-                        },
-                        tool_calls: None,
-                        finish_reason: choice.finish_reason.or_else(|| Some("stop".to_string())),
-                    }],
-                };
-                let line = format!("data: {}\n\n", serde_json::to_string(&final_chunk).unwrap_or_default());
-                let _ = tx.send(Ok(Bytes::from(line))).await;
-            }
-            let _ = tx.send(Ok(Bytes::from("data: [DONE]\n\n"))).await;
-        });
-        Ok(Box::pin(ReceiverStream::new(rx)))
+            })
+            .unwrap_or_else(|| "{}".to_string());
+        let call_id = format!("call_{}", &Uuid::new_v4().to_string()[..8]);
+        Some(vec![crate::models::ToolCall::function(call_id, name, args)])
+    } else {
+        None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_tool_calls_with_string_arguments() {
+        let json_str = r#"{"name": "fetch_weather", "arguments": "{\"city\":\"Honolulu\"}"}"#;
+        let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name.as_deref(), Some("fetch_weather"));
+        assert_eq!(calls[0].function.arguments.as_deref(), Some("{\"city\":\"Honolulu\"}"));
+        assert!(calls[0].id.as_deref().unwrap_or_default().starts_with("call_"));
+    }
+
+    #[test]
+    fn parse_tool_calls_with_object_arguments() {
+        let json_str = r#"{"name": "fetch_weather", "arguments": {"city":"Honolulu"}}"#;
+        let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name.as_deref(), Some("fetch_weather"));
+        assert!(calls[0].function.arguments.as_deref().unwrap_or_default().contains("Honolulu"));
+    }
+
+    #[test]
+    fn parse_tool_calls_with_missing_arguments() {
+        let json_str = r#"{"name": "fetch_weather"}"#;
+        let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].function.name.as_deref(), Some("fetch_weather"));
+        assert_eq!(calls[0].function.arguments.as_deref(), Some("{}"));
+    }
+
+    #[test]
+    fn parse_tool_calls_standard_array() {
+        let json_str = r#"{"tool_calls": [{"id": "call_abc", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}]}"#;
+        let calls = parse_tool_calls_from_content(json_str).expect("should parse tool call array");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id.as_deref(), Some("call_abc"));
+        assert_eq!(calls[0].function.name.as_deref(), Some("lookup"));
+    }
+
+    #[test]
+    fn parse_tool_calls_invalid_json_returns_none() {
+        assert!(parse_tool_calls_from_content("not json").is_none());
+    }
+
+    #[test]
+    fn parse_tool_calls_no_tool_info_returns_none() {
+        assert!(parse_tool_calls_from_content(r#"{"message": "hello"}"#).is_none());
     }
 }

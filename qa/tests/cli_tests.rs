@@ -4,7 +4,7 @@
 
 use serde_json::{json, Value};
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn routerctl_bin() -> PathBuf {
@@ -122,7 +122,7 @@ fn start_http_mock() -> String {
     url
 }
 
-fn globals(sock: &PathBuf, http: &str) -> (String, String) {
+fn globals(sock: &Path, http: &str) -> (String, String) {
     (sock.to_string_lossy().into_owned(), http.to_string())
 }
 

@@ -6,6 +6,7 @@
 //! chunk followed by `[DONE]`.
 
 pub mod chat_completion;
+pub mod chat_stream;
 pub mod engine_call;
 pub mod probe;
 

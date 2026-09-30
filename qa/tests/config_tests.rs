@@ -42,7 +42,7 @@ fn test_credential_resolution_schemes() {
     assert_eq!(res_sub, Some("gsk_test_key_abc123".to_string()));
 
     let mut tmp = NamedTempFile::new().unwrap();
-    write!(tmp, " file_secret_key_xyz \n").unwrap();
+    writeln!(tmp, " file_secret_key_xyz ").unwrap();
     let res_file = resolve_credential(Some(tmp.path().to_str().unwrap()), "custom").unwrap();
     assert_eq!(res_file, Some("file_secret_key_xyz".to_string()));
 }
