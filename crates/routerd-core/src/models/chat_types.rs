@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use super::tool_types::{FunctionCall, FunctionDefinition, ToolCall, ToolDefinition};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: String,
@@ -9,6 +11,10 @@ pub struct ChatMessage {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 impl ChatMessage {
@@ -18,7 +24,14 @@ impl ChatMessage {
             content: content.into(),
             name: None,
             reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
         }
+    }
+
+    pub fn with_tool_calls(mut self, calls: Vec<ToolCall>) -> Self {
+        self.tool_calls = Some(calls);
+        self
     }
 
     pub fn content_as_str(&self) -> String {
@@ -33,13 +46,15 @@ impl ChatMessage {
                 }
             }
             out
+        } else if self.content.is_null() {
+            String::new()
         } else {
             self.content.to_string()
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatCompletionRequest {
     pub model: String,
     pub messages: Vec<ChatMessage>,
@@ -63,48 +78,35 @@ pub struct ChatCompletionRequest {
     pub reasoning_content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<super::reasoning_effort::ReasoningEffort>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<Value>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, Value>,
 }
 
 impl ChatCompletionRequest {
-    /// Estimate prompt tokens based on characters (heuristic: ~3.8 chars per token + message framing)
     pub fn estimate_prompt_tokens(&self) -> usize {
         let mut chars = 0usize;
         for msg in &self.messages {
-            chars += msg.role.len() + 4;
-            chars += msg.content_as_str().len();
+            chars += msg.role.len() + 4 + msg.content_as_str().len();
         }
-        let token_estimate = (chars as f64 / 3.8).ceil() as usize;
-        token_estimate.max(1)
+        (chars as f64 / 3.8).ceil().max(1.0) as usize
     }
 
-    /// Estimate total context length (prompt tokens + expected output tokens)
     pub fn estimate_total_tokens(&self) -> usize {
-        let prompt_tokens = self.estimate_prompt_tokens();
-        let completion_tokens = self
-            .max_completion_tokens
-            .or(self.max_tokens)
-            .unwrap_or(2048);
-        prompt_tokens + completion_tokens
+        self.estimate_prompt_tokens() + self.max_completion_tokens.or(self.max_tokens).unwrap_or(2048)
     }
 
-    /// Extract difficulty tier requested (e.g. from model name like `router:fast` or tier field)
     pub fn requested_tier(&self) -> Option<&str> {
-        if let Some(t) = &self.tier {
-            return Some(t.as_str());
-        }
+        if let Some(t) = &self.tier { return Some(t.as_str()); }
         let m = self.model.as_str();
-        if m.starts_with("router:") {
-            return Some(&m["router:".len()..]);
-        }
-        if m == "fast" || m == "hard" {
-            return Some(m);
-        }
+        if m.starts_with("router:") { return Some(&m["router:".len()..]); }
+        if m == "fast" || m == "hard" { return Some(m); }
         None
     }
 
-    /// Extract effective reasoning token budget if requested.
     pub fn reasoning_budget(&self) -> Option<usize> {
         self.reasoning_budget.or(self.max_thinking_tokens)
     }
@@ -114,6 +116,8 @@ impl ChatCompletionRequest {
 pub struct ChatChoice {
     pub index: usize,
     pub message: ChatMessage,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
     pub finish_reason: Option<String>,
 }
 
@@ -143,12 +147,16 @@ pub struct ChunkDelta {
     pub content: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChunkChoice {
     pub index: usize,
     pub delta: ChunkDelta,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
 }
@@ -165,23 +173,14 @@ pub struct ChatCompletionChunk {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
 
     fn request(model: &str, tier: Option<&str>, max_tokens: Option<usize>) -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: model.to_string(),
             messages: vec![ChatMessage::new("user", serde_json::json!("hello"))],
-            temperature: None,
-            top_p: None,
             max_tokens,
-            max_completion_tokens: None,
-            stream: None,
             tier: tier.map(str::to_string),
-            reasoning_budget: None,
-            max_thinking_tokens: None,
-            reasoning_content: None,
-            reasoning_effort: None,
-            extra: HashMap::new(),
+            ..Default::default()
         }
     }
 
@@ -189,11 +188,10 @@ mod tests {
     fn content_as_str_reads_all_shapes() {
         let plain = ChatMessage::new("r", serde_json::json!("hi"));
         assert_eq!(plain.content_as_str(), "hi");
-        let parts = ChatMessage::new(
-            "r",
-            serde_json::json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]),
-        );
+        let parts = ChatMessage::new("r", serde_json::json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]));
         assert_eq!(parts.content_as_str(), "a b ");
+        let null_msg = ChatMessage::new("assistant", Value::Null);
+        assert_eq!(null_msg.content_as_str(), "");
     }
 
     #[test]

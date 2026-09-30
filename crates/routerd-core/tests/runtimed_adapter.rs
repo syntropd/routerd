@@ -7,7 +7,6 @@ use routerd_core::adapters::create_adapter;
 use routerd_core::config::ProviderConfig;
 use routerd_core::models::{ChatCompletionRequest, ChatMessage};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
@@ -27,17 +26,7 @@ fn request() -> ChatCompletionRequest {
     ChatCompletionRequest {
         model: "gemma-4-E2B-it-Q4_K_M".to_string(),
         messages: vec![ChatMessage::new("user", "Say hello.")],
-        temperature: None,
-        top_p: None,
-        max_tokens: None,
-        max_completion_tokens: None,
-        stream: None,
-        tier: None,
-        reasoning_budget: None,
-        max_thinking_tokens: None,
-        reasoning_content: None,
-        reasoning_effort: None,
-        extra: HashMap::new(),
+        ..Default::default()
     }
 }
 

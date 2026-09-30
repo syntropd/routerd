@@ -120,7 +120,9 @@ impl VarlinkBridgeAdapter {
                                                     role: None,
                                                     content,
                                                     reasoning_content: reasoning,
+                                                    tool_calls: None,
                                                 },
+                                                tool_calls: None,
                                                 finish_reason: None,
                                             }],
                                         };
@@ -147,7 +149,9 @@ impl VarlinkBridgeAdapter {
                                                 role: None,
                                                 content: None,
                                                 reasoning_content: None,
+                                                tool_calls: None,
                                             },
+                                            tool_calls: None,
                                             finish_reason: Some("stop".to_string()),
                                         }],
                                     };

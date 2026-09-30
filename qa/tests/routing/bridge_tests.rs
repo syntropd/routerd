@@ -39,17 +39,8 @@ fn request() -> ChatCompletionRequest {
     ChatCompletionRequest {
         model: "local-qwen".to_string(),
         messages: vec![ChatMessage::new("user", "Say hello.")],
-        temperature: None,
-        top_p: None,
         max_tokens: Some(64),
-        max_completion_tokens: None,
-        stream: None,
-        tier: None,
-        reasoning_budget: None,
-        max_thinking_tokens: None,
-        reasoning_content: None,
-        reasoning_effort: None,
-        extra: HashMap::new(),
+        ..Default::default()
     }
 }
 

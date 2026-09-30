@@ -45,16 +45,9 @@ fn payload_passes_extras_except_reserved() {
         model: "m".to_string(),
         messages: vec![ChatMessage::new("user", serde_json::json!("hi"))],
         temperature: Some(0.5),
-        top_p: None,
         max_tokens: Some(10),
-        max_completion_tokens: None,
-        stream: None,
-        tier: None,
-        reasoning_budget: None,
-        max_thinking_tokens: None,
-        reasoning_content: None,
-        reasoning_effort: None,
         extra: [("tier".to_string(), serde_json::json!("fast"))].into_iter().collect(),
+        ..Default::default()
     };
     let body = adapter("https://x/v1", None).build_payload("m", &req, true);
     assert_eq!(body["stream"], true);

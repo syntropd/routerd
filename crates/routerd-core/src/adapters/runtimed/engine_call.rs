@@ -192,18 +192,7 @@ mod tests {
         let adapter = RuntimedAdapter::new(&cfg);
         let mut req = ChatCompletionRequest {
             model: "test".into(),
-            messages: vec![],
-            temperature: None,
-            top_p: None,
-            max_tokens: None,
-            max_completion_tokens: None,
-            stream: None,
-            tier: None,
-            reasoning_budget: None,
-            max_thinking_tokens: None,
-            reasoning_content: None,
-            reasoning_effort: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
 
         let t_base = adapter.compute_generate_timeout(&req);

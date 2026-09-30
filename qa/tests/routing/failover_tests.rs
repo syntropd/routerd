@@ -22,6 +22,7 @@ async fn mock_chat_completion(
         choices: vec![ChatChoice {
             index: 0,
             message: ChatMessage::new("assistant", serde_json::json!("Failover response from backup provider")),
+            tool_calls: None,
             finish_reason: Some("stop".to_string()),
         }],
         usage: None,
@@ -92,12 +93,10 @@ async fn test_provider_failover_retry_success() {
     let req = ChatCompletionRequest {
         model: "router:fast".to_string(),
         messages: vec![ChatMessage::new("user", serde_json::json!("Test failover query"))],
-        temperature: None, top_p: None,
-        max_tokens: Some(64), max_completion_tokens: None, stream: Some(false),
+        max_tokens: Some(64),
+        stream: Some(false),
         tier: Some("fast".to_string()),
-        reasoning_budget: None, max_thinking_tokens: None, reasoning_content: None,
-        reasoning_effort: None,
-        extra: std::collections::HashMap::new(),
+        ..Default::default()
     };
 
     // 3. Dispatch chat completion. It should attempt primary, fail, and gracefully failover to backup
@@ -174,12 +173,10 @@ async fn test_provider_failover_exhaustion() {
     let req = ChatCompletionRequest {
         model: "router:fast".to_string(),
         messages: vec![ChatMessage::new("user", serde_json::json!("Test failover exhaustion"))],
-        temperature: None, top_p: None,
-        max_tokens: Some(64), max_completion_tokens: None, stream: Some(false),
+        max_tokens: Some(64),
+        stream: Some(false),
         tier: Some("fast".to_string()),
-        reasoning_budget: None, max_thinking_tokens: None, reasoning_content: None,
-        reasoning_effort: None,
-        extra: std::collections::HashMap::new(),
+        ..Default::default()
     };
 
     let result = engine.route_chat(&req).await;
@@ -220,12 +217,10 @@ async fn test_streaming_dispatch_collects_chunks() {
     let req = ChatCompletionRequest {
         model: "router:fast".to_string(),
         messages: vec![ChatMessage::new("user", serde_json::json!("Stream me"))],
-        temperature: None, top_p: None,
-        max_tokens: Some(64), max_completion_tokens: None, stream: Some(true),
+        max_tokens: Some(64),
+        stream: Some(true),
         tier: Some("fast".to_string()),
-        reasoning_budget: None, max_thinking_tokens: None, reasoning_content: None,
-        reasoning_effort: None,
-        extra: std::collections::HashMap::new(),
+        ..Default::default()
     };
     let (mut stream, scored) = engine.route_chat_stream(&req).await.unwrap();
     assert_eq!(scored.provider_id, "stream-healthy");

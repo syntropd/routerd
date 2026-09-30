@@ -19,7 +19,14 @@ impl RuntimedAdapter {
         target_model: &str,
         request: &ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse> {
-        let prompt = Self::extract_user_prompt(request);
+        let mut prompt = Self::extract_user_prompt(request);
+        if let Some(tools) = &request.tools {
+            if !tools.is_empty() {
+                if let Ok(tools_json) = serde_json::to_string(tools) {
+                    prompt.push_str(&format!("\nTools: {}\n", tools_json));
+                }
+            }
+        }
         debug!("runtimed [{}]: calling Generate for {}", self.id, target_model);
         let max_tokens = request
             .max_tokens
@@ -35,6 +42,9 @@ impl RuntimedAdapter {
             "seed": 0,
             "image": Value::Null,
         });
+        if request.tools.as_ref().map_or(false, |t| !t.is_empty()) {
+            params["grammar_type"] = json!("json");
+        }
         if let Some(budget) = request.reasoning_budget() {
             params["reasoning_budget"] = json!(budget);
         }
@@ -104,7 +114,10 @@ impl RuntimedAdapter {
                     content: Value::String(final_content),
                     name: None,
                     reasoning_content: final_reasoning,
+                    tool_calls: None,
+                    tool_call_id: None,
                 },
+                tool_calls: None,
                 finish_reason: Some(finish.to_string()),
             }],
             usage: Some(UsageInfo {
@@ -142,7 +155,9 @@ impl RuntimedAdapter {
                                     role: Some("assistant".to_string()),
                                     content: None,
                                     reasoning_content: Some(reasoning.to_string()),
+                                    tool_calls: None,
                                 },
+                                tool_calls: None,
                                 finish_reason: None,
                             }],
                         };
@@ -164,7 +179,9 @@ impl RuntimedAdapter {
                                 role: (!sent_role).then(|| "assistant".to_string()),
                                 content: Some(text),
                                 reasoning_content: None,
+                                tool_calls: None,
                             },
+                            tool_calls: None,
                             finish_reason: None,
                         }],
                     };
@@ -182,7 +199,9 @@ impl RuntimedAdapter {
                             role: None,
                             content: None,
                             reasoning_content: None,
+                            tool_calls: None,
                         },
+                        tool_calls: None,
                         finish_reason: choice.finish_reason.or_else(|| Some("stop".to_string())),
                     }],
                 };

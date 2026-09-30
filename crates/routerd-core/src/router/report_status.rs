@@ -2,7 +2,6 @@ use super::{read_rss_info, DaemonStatusInfo, ProviderStatusInfo, RouterEngine};
 use crate::error::{Result, RouterError};
 use crate::models::{ChatCompletionRequest, ModelItem, ModelListResponse};
 use crate::scoring::{ScoredCandidate, ScoringEngine};
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
@@ -17,18 +16,10 @@ impl RouterEngine {
     ) -> Result<Vec<ScoredCandidate>> {
         let dummy_request = ChatCompletionRequest {
             model: model.unwrap_or("fast").to_string(),
-            messages: vec![],
-            temperature: None,
-            top_p: None,
             max_tokens: Some(estimated_tokens.unwrap_or(1024)),
-            max_completion_tokens: None,
             stream: Some(require_stream),
             tier: tier.map(|t| t.to_string()),
-            reasoning_budget: None,
-            max_thinking_tokens: None,
-            reasoning_content: None,
-            reasoning_effort: None,
-            extra: HashMap::new(),
+            ..Default::default()
         };
 
         let (req_profile, tier_cfg, thresholds, candidates) = self.prepare_routing(&dummy_request).await?;

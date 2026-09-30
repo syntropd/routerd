@@ -20,7 +20,8 @@ pub use mesh::{
 };
 pub use models::{
     ChatChoice, ChatCompletionChunk, ChatCompletionRequest, ChatCompletionResponse, ChatMessage,
-    ModelItem, ModelListResponse, ProviderModelConfig, UsageInfo,
+    FunctionCall, FunctionDefinition, ModelItem, ModelListResponse, ProviderModelConfig, ToolCall,
+    ToolDefinition, UsageInfo,
 };
 pub use router::{DaemonStatusInfo, ProviderStatusInfo, RouterEngine};
 pub use scoring::{CandidateProvider, RequestProfile, ScoredCandidate, ScoringEngine};

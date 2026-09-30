@@ -17,8 +17,7 @@ pub fn clean_completion_response(response: &mut ChatCompletionResponse) {
             let mut filter = ThinkFilter::new();
             let mut items = filter.process(&text);
             items.extend(filter.flush());
-            let mut clean_content = String::new();
-            let mut reasoning = String::new();
+            let (mut clean_content, mut reasoning) = (String::new(), String::new());
             for item in items {
                 match item {
                     FilteredItem::Content(c) => clean_content.push_str(&c),
@@ -29,9 +28,7 @@ pub fn clean_completion_response(response: &mut ChatCompletionResponse) {
                 clean_content
             } else if choice.finish_reason.as_deref() == Some("length") {
                 if !reasoning.trim().is_empty() { reasoning.clone() } else { "[Response truncated during reasoning due to token limit]".to_string() }
-            } else {
-                clean_content
-            });
+            } else { clean_content });
             if !reasoning.is_empty() {
                 choice.message.reasoning_content = match &choice.message.reasoning_content {
                     Some(prev) => Some(format!("{prev}{reasoning}")),
@@ -46,23 +43,17 @@ pub fn clean_completion_response(response: &mut ChatCompletionResponse) {
 pub fn transform_sse_stream(mut input: ByteStream) -> ByteStream {
     let (tx, rx) = mpsc::channel(32);
     tokio::spawn(async move {
-        let mut filter = ThinkFilter::new();
-        let mut buffer = String::new();
+        let (mut filter, mut buffer) = (ThinkFilter::new(), String::new());
         while let Some(chunk_res) = input.next().await {
             let bytes = match chunk_res {
                 Ok(b) => b,
-                Err(e) => {
-                    let _ = tx.send(Err(e)).await;
-                    return;
-                }
+                Err(e) => { let _ = tx.send(Err(e)).await; return; }
             };
             buffer.push_str(&String::from_utf8_lossy(&bytes));
             while let Some((pos, len)) = find_sse_event_boundary(&buffer) {
                 let event = buffer[..pos].to_string();
                 buffer.drain(..pos + len);
-                if !process_sse_event(&event, &mut filter, &tx).await {
-                    return;
-                }
+                if !process_sse_event(&event, &mut filter, &tx).await { return; }
             }
         }
         if !buffer.trim().is_empty() {
@@ -71,9 +62,7 @@ pub fn transform_sse_stream(mut input: ByteStream) -> ByteStream {
         }
         for item in filter.flush() {
             if let Some(line) = synthetic_chunk_line(item) {
-                if tx.send(Ok(Bytes::from(line))).await.is_err() {
-                    return;
-                }
+                if tx.send(Ok(Bytes::from(line))).await.is_err() { return; }
             }
         }
     });
@@ -88,11 +77,8 @@ async fn process_sse_event(
     for line in event.lines() {
         let trimmed = line.trim();
         if !trimmed.starts_with("data:") {
-            if !trimmed.is_empty() {
-                let out = format!("{trimmed}\n\n");
-                if tx.send(Ok(Bytes::from(out))).await.is_err() {
-                    return false;
-                }
+            if !trimmed.is_empty() && tx.send(Ok(Bytes::from(format!("{trimmed}\n\n")))).await.is_err() {
+                return false;
             }
             continue;
         }
@@ -100,16 +86,13 @@ async fn process_sse_event(
         if payload == "[DONE]" {
             for item in filter.flush() {
                 if let Some(chunk_line) = synthetic_chunk_line(item) {
-                    if tx.send(Ok(Bytes::from(chunk_line))).await.is_err() {
-                        return false;
-                    }
+                    if tx.send(Ok(Bytes::from(chunk_line))).await.is_err() { return false; }
                 }
             }
             return tx.send(Ok(Bytes::from("data: [DONE]\n\n"))).await.is_ok();
         }
         let Ok(mut val) = serde_json::from_str::<Value>(payload) else {
-            let out = format!("data: {payload}\n\n");
-            return tx.send(Ok(Bytes::from(out))).await.is_ok();
+            return tx.send(Ok(Bytes::from(format!("data: {payload}\n\n")))).await.is_ok();
         };
         if let Some(choices) = val.get_mut("choices").and_then(|c| c.as_array_mut()) {
             if let Some(first) = choices.first_mut() {
@@ -120,14 +103,10 @@ async fn process_sse_event(
                         let items = filter.process(&raw_content);
                         if items.is_empty() {
                             let has_role = delta.get("role").is_some();
-                            if let Some(obj) = delta.as_object_mut() {
-                                obj.remove("content");
-                            }
-                            if has_finish || has_role {
-                                let out = format!("data: {}\n\n", serde_json::to_string(&val).unwrap_or_default());
-                                if tx.send(Ok(Bytes::from(out))).await.is_err() {
-                                    return false;
-                                }
+                            let has_tools = delta.get("tool_calls").is_some();
+                            if let Some(obj) = delta.as_object_mut() { obj.remove("content"); }
+                            if (has_finish || has_role || has_tools) && tx.send(Ok(Bytes::from(format!("data: {}\n\n", serde_json::to_string(&val).unwrap_or_default())))).await.is_err() {
+                                return false;
                             }
                             continue;
                         }
@@ -135,19 +114,12 @@ async fn process_sse_event(
                             let mut clone_val = val.clone();
                             if let Some(d) = clone_val["choices"][0]["delta"].as_object_mut() {
                                 match item {
-                                    FilteredItem::Reasoning(r) => {
-                                        d.remove("content");
-                                        d.insert("reasoning_content".to_string(), json!(r));
-                                    }
-                                    FilteredItem::Content(c) => {
-                                        d.insert("content".to_string(), json!(c));
-                                    }
+                                    FilteredItem::Reasoning(r) => { d.remove("content"); d.insert("reasoning_content".into(), json!(r)); }
+                                    FilteredItem::Content(c) => { d.insert("content".into(), json!(c)); }
                                 }
                             }
                             let out = format!("data: {}\n\n", serde_json::to_string(&clone_val).unwrap_or_default());
-                            if tx.send(Ok(Bytes::from(out))).await.is_err() {
-                                return false;
-                            }
+                            if tx.send(Ok(Bytes::from(out))).await.is_err() { return false; }
                         }
                         continue;
                     }
@@ -155,9 +127,7 @@ async fn process_sse_event(
             }
         }
         let out = format!("data: {}\n\n", serde_json::to_string(&val).unwrap_or_default());
-        if tx.send(Ok(Bytes::from(out))).await.is_err() {
-            return false;
-        }
+        if tx.send(Ok(Bytes::from(out))).await.is_err() { return false; }
     }
     true
 }
@@ -167,15 +137,7 @@ fn synthetic_chunk_line(item: FilteredItem) -> Option<String> {
         FilteredItem::Content(c) => (Some(c), None),
         FilteredItem::Reasoning(r) => (None, Some(r)),
     };
-    let val = json!({
-        "choices": [{
-            "index": 0,
-            "delta": {
-                "content": c,
-                "reasoning_content": r
-            }
-        }]
-    });
+    let val = json!({ "choices": [{ "index": 0, "delta": { "content": c, "reasoning_content": r } }] });
     Some(format!("data: {}\n\n", serde_json::to_string(&val).ok()?))
 }
 
@@ -184,8 +146,7 @@ fn find_sse_event_boundary(buf: &str) -> Option<(usize, usize)> {
     let lf = buf.find("\n\n").map(|p| (p, 2));
     match (crlf, lf) {
         (Some((p1, l1)), Some((p2, l2))) => Some(if p1 <= p2 { (p1, l1) } else { (p2, l2) }),
-        (Some(c), None) => Some(c),
-        (None, Some(l)) => Some(l),
+        (Some(c), None) | (None, Some(c)) => Some(c),
         (None, None) => None,
     }
 }
@@ -205,13 +166,11 @@ mod tests {
     #[test]
     fn test_clean_completion_response_with_think() {
         let mut resp = ChatCompletionResponse {
-            id: "id1".into(),
-            object: "chat.completion".into(),
-            created: 0,
-            model: "m".into(),
+            id: "id1".into(), object: "chat.completion".into(), created: 0, model: "m".into(),
             choices: vec![ChatChoice {
                 index: 0,
                 message: ChatMessage::new("assistant", "<think>thought step</think>final answer"),
+                tool_calls: None,
                 finish_reason: Some("stop".into()),
             }],
             usage: None,
@@ -224,13 +183,11 @@ mod tests {
     #[test]
     fn test_clean_completion_swallow_leading_end_think() {
         let mut resp = ChatCompletionResponse {
-            id: "id2".into(),
-            object: "chat.completion".into(),
-            created: 0,
-            model: "m".into(),
+            id: "id2".into(), object: "chat.completion".into(), created: 0, model: "m".into(),
             choices: vec![ChatChoice {
                 index: 0,
                 message: ChatMessage::new("assistant", "</think>clean response"),
+                tool_calls: None,
                 finish_reason: Some("stop".into()),
             }],
             usage: None,
@@ -246,10 +203,24 @@ mod tests {
             id: "id3".into(), object: "chat.completion".into(), created: 0, model: "m".into(),
             choices: vec![ChatChoice {
                 index: 0, message: ChatMessage::new("assistant", "<think>truncated thought"),
-                finish_reason: Some("length".into()),
+                tool_calls: None, finish_reason: Some("length".into()),
             }], usage: None,
         };
         clean_completion_response(&mut resp);
         assert_eq!(resp.choices[0].message.content_as_str(), "truncated thought");
+    }
+
+    #[tokio::test]
+    async fn test_transform_sse_stream_passes_tool_calls() {
+        let input_bytes = b"data: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"test_fn\",\"arguments\":\"{}\"}}]}}]}\n\ndata: [DONE]\n\n";
+        let stream = Box::pin(futures::stream::iter(vec![Ok(bytes::Bytes::from_static(input_bytes))]));
+        let mut out_stream = transform_sse_stream(stream);
+        let mut collected = String::new();
+        while let Some(Ok(b)) = out_stream.next().await {
+            collected.push_str(&String::from_utf8_lossy(&b));
+        }
+        assert!(collected.contains("tool_calls"));
+        assert!(collected.contains("call_1"));
+        assert!(collected.contains("test_fn"));
     }
 }

@@ -88,8 +88,10 @@ impl OpenAICompatibleAdapter {
         if let Some(max_tokens) = req.max_tokens { body["max_tokens"] = json!(max_tokens); }
         if let Some(max_completion) = req.max_completion_tokens { body["max_completion_tokens"] = json!(max_completion); }
         if let Some(effort) = req.reasoning_effort { body["reasoning_effort"] = json!(effort.as_str()); }
+        if let Some(tools) = &req.tools { body["tools"] = json!(tools); }
+        if let Some(choice) = &req.tool_choice { body["tool_choice"] = choice.clone(); }
         for (k, v) in &req.extra {
-            if k != "model" && k != "messages" && k != "stream" && k != "tier" && k != "reasoning_effort" {
+            if k != "model" && k != "messages" && k != "stream" && k != "tier" && k != "reasoning_effort" && k != "tools" && k != "tool_choice" {
                 body[k] = v.clone();
             }
         }
@@ -128,11 +130,18 @@ impl ProviderAdapter for OpenAICompatibleAdapter {
             });
         }
 
-        let completion: ChatCompletionResponse = resp.json().await.map_err(|e| {
+        let mut completion: ChatCompletionResponse = resp.json().await.map_err(|e| {
             RouterError::Http(format!("Failed to parse JSON reply from '{}': {}", self.id, e))
         })?;
 
-        // Ephemeral lifetime: request and response payloads are owned and dropped
+        for choice in &mut completion.choices {
+            if choice.tool_calls.is_none() && choice.message.tool_calls.is_some() {
+                choice.tool_calls = choice.message.tool_calls.clone();
+            } else if choice.message.tool_calls.is_none() && choice.tool_calls.is_some() {
+                choice.message.tool_calls = choice.tool_calls.clone();
+            }
+        }
+
         Ok(completion)
     }
 

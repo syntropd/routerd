@@ -9,17 +9,8 @@ fn test_token_estimation_and_limits() {
             ChatMessage::new("system", json!("You are a helpful Linux assistant.")),
             ChatMessage::new("user", json!("Explain how systemd socket activation works in pure Rust.")),
         ],
-        temperature: None,
-        top_p: None,
         max_tokens: Some(1024),
-        max_completion_tokens: None,
-        stream: None,
-        tier: None,
-        reasoning_budget: None,
-        max_thinking_tokens: None,
-        reasoning_content: None,
-        reasoning_effort: None,
-        extra: std::collections::HashMap::new(),
+        ..Default::default()
     };
 
     let prompt_est = req.estimate_prompt_tokens();
@@ -35,17 +26,8 @@ fn test_zero_cross_chat_context_contamination() {
     let req1 = ChatCompletionRequest {
         model: "router:fast".to_string(),
         messages: vec![ChatMessage::new("user", json!("Secret confidential prompt 1"))],
-        temperature: None,
-        top_p: None,
         max_tokens: Some(128),
-        max_completion_tokens: None,
-        stream: None,
-        tier: None,
-        reasoning_budget: None,
-        max_thinking_tokens: None,
-        reasoning_content: None,
-        reasoning_effort: None,
-        extra: std::collections::HashMap::new(),
+        ..Default::default()
     };
 
     let p1 = RequestProfile::from_request(&req1, "fast");
@@ -58,17 +40,8 @@ fn test_zero_cross_chat_context_contamination() {
             "user",
             json!("Public prompt 2 with different length content here"),
         )],
-        temperature: None,
-        top_p: None,
         max_tokens: Some(128),
-        max_completion_tokens: None,
-        stream: None,
-        tier: None,
-        reasoning_budget: None,
-        max_thinking_tokens: None,
-        reasoning_content: None,
-        reasoning_effort: None,
-        extra: std::collections::HashMap::new(),
+        ..Default::default()
     };
 
     let p2 = RequestProfile::from_request(&req2, "fast");

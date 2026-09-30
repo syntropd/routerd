@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "663f4d8",
+ "rev": "a50e49a",
  "dirty": true,
  "pages": [
   {
@@ -201,7 +201,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/minimax_tests.rs",
-   "lines": 63,
+   "lines": 56,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -215,28 +215,28 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/openai.rs",
-   "lines": 236,
+   "lines": 245,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-core/src/adapters/openai_tests.rs",
-   "lines": 74,
+   "lines": 113,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 196,
+   "lines": 215,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/engine_call.rs",
-   "lines": 221,
+   "lines": 210,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -264,14 +264,14 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_completion.rs",
-   "lines": 147,
+   "lines": 150,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_stream.rs",
-   "lines": 185,
+   "lines": 189,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -362,7 +362,7 @@
   },
   {
    "path": "./crates/routerd-core/src/lib.rs",
-   "lines": 36,
+   "lines": 37,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -397,14 +397,14 @@
   },
   {
    "path": "./crates/routerd-core/src/models/chat_types.rs",
-   "lines": 227,
+   "lines": 225,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/models/mod.rs",
-   "lines": 7,
+   "lines": 9,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -419,6 +419,13 @@
   {
    "path": "./crates/routerd-core/src/models/reasoning_effort.rs",
    "lines": 100,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 2
+  },
+  {
+   "path": "./crates/routerd-core/src/models/tool_types.rs",
+   "lines": 91,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
@@ -467,7 +474,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/report_status.rs",
-   "lines": 210,
+   "lines": 201,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -586,7 +593,7 @@
   },
   {
    "path": "./crates/routerd-core/tests/runtimed_adapter.rs",
-   "lines": 242,
+   "lines": 231,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -621,7 +628,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/sse_transform.rs",
-   "lines": 255,
+   "lines": 226,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -782,21 +789,21 @@
   },
   {
    "path": "./qa/tests/routing/bridge_tests.rs",
-   "lines": 203,
+   "lines": 194,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/context_limits_tests.rs",
-   "lines": 82,
+   "lines": 55,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/failover_tests.rs",
-   "lines": 237,
+   "lines": 232,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

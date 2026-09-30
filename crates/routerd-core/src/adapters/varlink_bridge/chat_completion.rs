@@ -134,7 +134,10 @@ impl VarlinkBridgeAdapter {
                     content: Value::String(final_content),
                     name: None,
                     reasoning_content: final_reasoning,
+                    tool_calls: None,
+                    tool_call_id: None,
                 },
+                tool_calls: None,
                 finish_reason: Some("stop".to_string()),
             }],
             usage: Some(UsageInfo {
