@@ -38,6 +38,9 @@ impl RuntimedAdapter {
         if let Some(budget) = request.reasoning_budget() {
             params["reasoning_budget"] = json!(budget);
         }
+        if let Some(effort) = request.reasoning_effort {
+            params["reasoning_effort"] = json!(effort.as_str());
+        }
         let parameters = self
             .call_with_timeout("io.syntrop.Runtime1.Generate", params, self.generate_timeout)
             .await?;
@@ -63,15 +66,22 @@ impl RuntimedAdapter {
         let mut items = filter.process(text);
         items.extend(filter.flush());
         let mut clean_content = String::new();
+        let mut reasoning_content = String::new();
         for item in items {
-            if let crate::wire::FilteredItem::Content(c) = item {
-                clean_content.push_str(&c);
+            match item {
+                crate::wire::FilteredItem::Content(c) => clean_content.push_str(&c),
+                crate::wire::FilteredItem::Reasoning(r) => reasoning_content.push_str(&r),
             }
         }
-        let final_content = if clean_content.is_empty() && !text.is_empty() {
+        let final_content = if clean_content.is_empty() && !text.is_empty() && reasoning_content.is_empty() {
             text.to_string()
         } else {
             clean_content
+        };
+        let final_reasoning = if reasoning_content.is_empty() {
+            None
+        } else {
+            Some(reasoning_content)
         };
         Ok(ChatCompletionResponse {
             id: format!("chatcmpl-runtimed-{}", Uuid::new_v4()),
@@ -84,6 +94,7 @@ impl RuntimedAdapter {
                     role: "assistant".to_string(),
                     content: Value::String(final_content),
                     name: None,
+                    reasoning_content: final_reasoning,
                 },
                 finish_reason: Some(finish.to_string()),
             }],

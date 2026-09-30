@@ -26,11 +26,7 @@ fn cfg(socket: &PathBuf) -> ProviderConfig {
 fn request() -> ChatCompletionRequest {
     ChatCompletionRequest {
         model: "gemma-4-E2B-it-Q4_K_M".to_string(),
-        messages: vec![ChatMessage {
-            role: "user".to_string(),
-            content: Value::String("Say hello.".to_string()),
-            name: None,
-        }],
+        messages: vec![ChatMessage::new("user", "Say hello.")],
         temperature: None,
         top_p: None,
         max_tokens: None,
@@ -40,6 +36,7 @@ fn request() -> ChatCompletionRequest {
         reasoning_budget: None,
         max_thinking_tokens: None,
         reasoning_content: None,
+        reasoning_effort: None,
         extra: HashMap::new(),
     }
 }

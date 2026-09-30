@@ -7,9 +7,20 @@ pub struct ChatMessage {
     pub content: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_content: Option<String>,
 }
 
 impl ChatMessage {
+    pub fn new(role: impl Into<String>, content: impl Into<Value>) -> Self {
+        Self {
+            role: role.into(),
+            content: content.into(),
+            name: None,
+            reasoning_content: None,
+        }
+    }
+
     pub fn content_as_str(&self) -> String {
         if let Some(s) = self.content.as_str() {
             s.to_string()
@@ -50,6 +61,8 @@ pub struct ChatCompletionRequest {
     pub max_thinking_tokens: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<super::reasoning_effort::ReasoningEffort>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, Value>,
 }
@@ -157,11 +170,7 @@ mod tests {
     fn request(model: &str, tier: Option<&str>, max_tokens: Option<usize>) -> ChatCompletionRequest {
         ChatCompletionRequest {
             model: model.to_string(),
-            messages: vec![ChatMessage {
-                role: "user".to_string(),
-                content: serde_json::json!("hello"),
-                name: None,
-            }],
+            messages: vec![ChatMessage::new("user", serde_json::json!("hello"))],
             temperature: None,
             top_p: None,
             max_tokens,
@@ -171,23 +180,19 @@ mod tests {
             reasoning_budget: None,
             max_thinking_tokens: None,
             reasoning_content: None,
+            reasoning_effort: None,
             extra: HashMap::new(),
         }
     }
 
     #[test]
     fn content_as_str_reads_all_shapes() {
-        let plain = ChatMessage {
-            role: "r".to_string(),
-            content: serde_json::json!("hi"),
-            name: None,
-        };
+        let plain = ChatMessage::new("r", serde_json::json!("hi"));
         assert_eq!(plain.content_as_str(), "hi");
-        let parts = ChatMessage {
-            role: "r".to_string(),
-            content: serde_json::json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]),
-            name: None,
-        };
+        let parts = ChatMessage::new(
+            "r",
+            serde_json::json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]),
+        );
         assert_eq!(parts.content_as_str(), "a b ");
     }
 

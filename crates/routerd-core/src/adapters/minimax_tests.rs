@@ -43,11 +43,7 @@ fn headers_carry_bearer_only_with_key() {
 fn payload_passes_extras_except_reserved() {
     let req = ChatCompletionRequest {
         model: "m".to_string(),
-        messages: vec![ChatMessage {
-            role: "user".to_string(),
-            content: serde_json::json!("hi"),
-            name: None,
-        }],
+        messages: vec![ChatMessage::new("user", serde_json::json!("hi"))],
         temperature: Some(0.5),
         top_p: None,
         max_tokens: Some(10),
@@ -57,6 +53,7 @@ fn payload_passes_extras_except_reserved() {
         reasoning_budget: None,
         max_thinking_tokens: None,
         reasoning_content: None,
+        reasoning_effort: None,
         extra: [("tier".to_string(), serde_json::json!("fast"))].into_iter().collect(),
     };
     let body = adapter("https://x/v1", None).build_payload("m", &req, true);

@@ -123,6 +123,7 @@ impl VarlinkBridgeAdapter {
                     role: "assistant".to_string(),
                     content: Value::String(final_content),
                     name: None,
+                    reasoning_content: None,
                 },
                 finish_reason: Some("stop".to_string()),
             }],

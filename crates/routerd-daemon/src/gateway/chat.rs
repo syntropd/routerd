@@ -29,6 +29,7 @@ pub async fn chat_completions_handler(
                     "Streaming response routed to provider '{}' (model '{}')",
                     scored.provider_id, scored.model_name
                 );
+                let transformed = super::sse_transform::transform_sse_stream(stream);
 
                 Response::builder()
                     .status(StatusCode::OK)
@@ -37,7 +38,7 @@ pub async fn chat_completions_handler(
                     .header(header::CONNECTION, "keep-alive")
                     .header("x-syntrop-provider", scored.provider_id)
                     .header("x-syntrop-model", scored.model_name)
-                    .body(Body::from_stream(stream))
+                    .body(Body::from_stream(transformed))
                     .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
             }
             Err(e) => {
@@ -59,7 +60,8 @@ pub async fn chat_completions_handler(
         }
     } else {
         match engine.route_chat(&request).await {
-            Ok((response, scored)) => {
+            Ok((mut response, scored)) => {
+                super::sse_transform::clean_completion_response(&mut response);
                 debug!(
                     "Non-streaming response routed to provider '{}' (model '{}')",
                     scored.provider_id, scored.model_name

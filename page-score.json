@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "c69d5c3",
+ "rev": "2b92c6f",
  "dirty": true,
  "pages": [
   {
@@ -12,7 +12,7 @@
   },
   {
    "path": "./crates/routerctl/src/client/chat_completion.rs",
-   "lines": 80,
+   "lines": 84,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -40,14 +40,14 @@
   },
   {
    "path": "./crates/routerctl/src/cli.rs",
-   "lines": 179,
+   "lines": 183,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 7
   },
   {
    "path": "./crates/routerctl/src/commands/ask.rs",
-   "lines": 82,
+   "lines": 84,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -57,7 +57,7 @@
    "lines": 72,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 26
+   "reach": 27
   },
   {
    "path": "./crates/routerctl/src/commands/catalog/mod.rs",
@@ -201,7 +201,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/minimax_tests.rs",
-   "lines": 65,
+   "lines": 63,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -215,21 +215,21 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/openai.rs",
-   "lines": 250,
+   "lines": 236,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
   },
   {
    "path": "./crates/routerd-core/src/adapters/openai_tests.rs",
-   "lines": 76,
+   "lines": 74,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 151,
+   "lines": 176,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -264,7 +264,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_completion.rs",
-   "lines": 121,
+   "lines": 137,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -397,14 +397,14 @@
   },
   {
    "path": "./crates/routerd-core/src/models/chat_types.rs",
-   "lines": 219,
+   "lines": 227,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/models/mod.rs",
-   "lines": 5,
+   "lines": 7,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -412,6 +412,13 @@
   {
    "path": "./crates/routerd-core/src/models/provider_models.rs",
    "lines": 118,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 2
+  },
+  {
+   "path": "./crates/routerd-core/src/models/reasoning_effort.rs",
+   "lines": 99,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
@@ -460,7 +467,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/report_status.rs",
-   "lines": 208,
+   "lines": 210,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -551,7 +558,7 @@
   },
   {
    "path": "./crates/routerd-core/src/wire/filter_think.rs",
-   "lines": 221,
+   "lines": 236,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -572,7 +579,7 @@
   },
   {
    "path": "./crates/routerd-core/tests/runtimed_adapter.rs",
-   "lines": 225,
+   "lines": 223,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -586,7 +593,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/chat.rs",
-   "lines": 110,
+   "lines": 112,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -600,10 +607,17 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 21,
+   "lines": 22,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/sse_transform.rs",
+   "lines": 218,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
   },
   {
    "path": "./crates/routerd-daemon/src/lib.rs",
@@ -761,21 +775,21 @@
   },
   {
    "path": "./qa/tests/routing/bridge_tests.rs",
-   "lines": 205,
+   "lines": 203,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/context_limits_tests.rs",
-   "lines": 89,
+   "lines": 82,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/failover_tests.rs",
-   "lines": 250,
+   "lines": 237,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

@@ -82,31 +82,17 @@ impl OpenAICompatibleAdapter {
     }
 
     pub(crate) fn build_payload(&self, target_model: &str, req: &ChatCompletionRequest, stream: bool) -> Value {
-        let mut body = json!({
-            "model": target_model,
-            "messages": req.messages,
-            "stream": stream,
-        });
-
-        if let Some(temp) = req.temperature {
-            body["temperature"] = json!(temp);
-        }
-        if let Some(top_p) = req.top_p {
-            body["top_p"] = json!(top_p);
-        }
-        if let Some(max_tokens) = req.max_tokens {
-            body["max_tokens"] = json!(max_tokens);
-        }
-        if let Some(max_completion) = req.max_completion_tokens {
-            body["max_completion_tokens"] = json!(max_completion);
-        }
-
+        let mut body = json!({ "model": target_model, "messages": req.messages, "stream": stream });
+        if let Some(temp) = req.temperature { body["temperature"] = json!(temp); }
+        if let Some(top_p) = req.top_p { body["top_p"] = json!(top_p); }
+        if let Some(max_tokens) = req.max_tokens { body["max_tokens"] = json!(max_tokens); }
+        if let Some(max_completion) = req.max_completion_tokens { body["max_completion_tokens"] = json!(max_completion); }
+        if let Some(effort) = req.reasoning_effort { body["reasoning_effort"] = json!(effort.as_str()); }
         for (k, v) in &req.extra {
-            if k != "model" && k != "messages" && k != "stream" && k != "tier" {
+            if k != "model" && k != "messages" && k != "stream" && k != "tier" && k != "reasoning_effort" {
                 body[k] = v.clone();
             }
         }
-
         body
     }
 }

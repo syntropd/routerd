@@ -27,6 +27,7 @@ impl RouterEngine {
             reasoning_budget: None,
             max_thinking_tokens: None,
             reasoning_content: None,
+            reasoning_effort: None,
             extra: HashMap::new(),
         };
 

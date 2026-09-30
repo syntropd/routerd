@@ -1,5 +1,6 @@
 pub mod chat;
 pub mod health;
+pub mod sse_transform;
 
 use axum::extract::State;
 use axum::routing::{get, post};

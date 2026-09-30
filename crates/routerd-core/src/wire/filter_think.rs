@@ -69,11 +69,13 @@ impl ThinkFilter {
                 } else {
                     let mut candidate = self.pending.clone();
                     candidate.push(ch);
-                    if OPEN_TAG.starts_with(&candidate) {
+                    if OPEN_TAG.starts_with(&candidate) || CLOSE_TAG.starts_with(&candidate) {
                         self.pending = candidate;
                         if self.pending == OPEN_TAG {
                             self.pending.clear();
                             self.state = ThinkFilterState::InThink;
+                        } else if self.pending == CLOSE_TAG {
+                            self.pending.clear();
                         }
                     } else {
                         let flushed = std::mem::take(&mut self.pending);
@@ -217,5 +219,18 @@ mod tests {
                 FilteredItem::Reasoning("foo".into()),
             ]
         );
+    }
+
+    #[test]
+    fn test_swallow_leading_end_think_tag() {
+        let mut filter = ThinkFilter::new();
+        let items = filter.process("</think>Hello world");
+        assert_eq!(items, vec![FilteredItem::Content("Hello world".into())]);
+        assert!(filter.flush().is_empty());
+
+        let mut filter2 = ThinkFilter::new();
+        assert_eq!(filter2.process("</th"), vec![]);
+        assert_eq!(filter2.process("ink>Streaming answer"), vec![FilteredItem::Content("Streaming answer".into())]);
+        assert!(filter2.flush().is_empty());
     }
 }

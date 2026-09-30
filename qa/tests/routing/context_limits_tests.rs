@@ -6,16 +6,8 @@ fn test_token_estimation_and_limits() {
     let req = ChatCompletionRequest {
         model: "router:fast".to_string(),
         messages: vec![
-            ChatMessage {
-                role: "system".to_string(),
-                content: json!("You are a helpful Linux assistant."),
-                name: None,
-            },
-            ChatMessage {
-                role: "user".to_string(),
-                content: json!("Explain how systemd socket activation works in pure Rust."),
-                name: None,
-            },
+            ChatMessage::new("system", json!("You are a helpful Linux assistant.")),
+            ChatMessage::new("user", json!("Explain how systemd socket activation works in pure Rust.")),
         ],
         temperature: None,
         top_p: None,
@@ -26,6 +18,7 @@ fn test_token_estimation_and_limits() {
         reasoning_budget: None,
         max_thinking_tokens: None,
         reasoning_content: None,
+        reasoning_effort: None,
         extra: std::collections::HashMap::new(),
     };
 
@@ -41,11 +34,7 @@ fn test_zero_cross_chat_context_contamination() {
     // Verify request lifecycle is completely isolated and no state persists
     let req1 = ChatCompletionRequest {
         model: "router:fast".to_string(),
-        messages: vec![ChatMessage {
-            role: "user".to_string(),
-            content: json!("Secret confidential prompt 1"),
-            name: None,
-        }],
+        messages: vec![ChatMessage::new("user", json!("Secret confidential prompt 1"))],
         temperature: None,
         top_p: None,
         max_tokens: Some(128),
@@ -55,6 +44,7 @@ fn test_zero_cross_chat_context_contamination() {
         reasoning_budget: None,
         max_thinking_tokens: None,
         reasoning_content: None,
+        reasoning_effort: None,
         extra: std::collections::HashMap::new(),
     };
 
@@ -64,11 +54,10 @@ fn test_zero_cross_chat_context_contamination() {
 
     let req2 = ChatCompletionRequest {
         model: "router:fast".to_string(),
-        messages: vec![ChatMessage {
-            role: "user".to_string(),
-            content: json!("Public prompt 2 with different length content here"),
-            name: None,
-        }],
+        messages: vec![ChatMessage::new(
+            "user",
+            json!("Public prompt 2 with different length content here"),
+        )],
         temperature: None,
         top_p: None,
         max_tokens: Some(128),
@@ -78,6 +67,7 @@ fn test_zero_cross_chat_context_contamination() {
         reasoning_budget: None,
         max_thinking_tokens: None,
         reasoning_content: None,
+        reasoning_effort: None,
         extra: std::collections::HashMap::new(),
     };
 

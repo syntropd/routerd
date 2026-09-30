@@ -128,6 +128,10 @@ pub struct AskArgs {
     #[arg(short, long, default_value = "router:auto")]
     pub model: String,
 
+    /// Reasoning effort tier (none, low, medium, high, max)
+    #[arg(short = 'e', long = "effort", alias = "reasoning-effort")]
+    pub effort: Option<String>,
+
     /// Max completion tokens
     #[arg(long, default_value_t = 256)]
     pub max_tokens: usize,

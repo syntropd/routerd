@@ -21,11 +21,7 @@ fn adapter(base_url: &str) -> OpenAICompatibleAdapter {
 fn request() -> ChatCompletionRequest {
     ChatCompletionRequest {
         model: "m".to_string(),
-        messages: vec![ChatMessage {
-            role: "user".to_string(),
-            content: serde_json::json!("hi"),
-            name: None,
-        }],
+        messages: vec![ChatMessage::new("user", serde_json::json!("hi"))],
         temperature: None,
         top_p: None,
         max_tokens: Some(7),
@@ -35,6 +31,7 @@ fn request() -> ChatCompletionRequest {
         reasoning_budget: None,
         max_thinking_tokens: None,
         reasoning_content: None,
+        reasoning_effort: None,
         extra: HashMap::new(),
     }
 }

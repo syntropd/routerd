@@ -13,9 +13,10 @@ impl RouterctlClient {
         model: &str,
         prompt: &str,
         max_tokens: usize,
+        effort: Option<&str>,
     ) -> Result<String> {
         let url = format!("{}/v1/chat/completions", self.http_url);
-        let body = json!({
+        let mut body = json!({
             "model": model,
             "messages": [
                 { "role": "user", "content": prompt }
@@ -23,6 +24,9 @@ impl RouterctlClient {
             "max_tokens": max_tokens,
             "stream": false
         });
+        if let Some(e) = effort {
+            body["reasoning_effort"] = json!(e);
+        }
         let http = HttpClient::builder()
             .timeout(Duration::from_secs(600))
             .build()

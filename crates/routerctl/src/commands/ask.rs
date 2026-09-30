@@ -9,7 +9,7 @@ pub async fn run_ask(
 ) -> Result<()> {
     let prompt = join_prompt(&args.prompt);
     match client
-        .chat_completion(&args.model, &prompt, args.max_tokens)
+        .chat_completion(&args.model, &prompt, args.max_tokens, args.effort.as_deref())
         .await
     {
         Ok(text) => {
@@ -72,11 +72,13 @@ mod tests {
         };
         assert_eq!(args.model, "router:auto");
         assert_eq!(args.max_tokens, 256);
+        assert_eq!(args.effort, None);
         assert_eq!(join_prompt(&args.prompt), "say hello");
-        let cli = Cli::try_parse_from(["routerctl", "ask", "-m", "router:fast", "hi"]).unwrap();
+        let cli = Cli::try_parse_from(["routerctl", "ask", "-m", "router:fast", "-e", "low", "hi"]).unwrap();
         let Commands::Ask(args) = cli.command else {
             panic!("want Ask");
         };
         assert_eq!(args.model, "router:fast");
+        assert_eq!(args.effort.as_deref(), Some("low"));
     }
 }
