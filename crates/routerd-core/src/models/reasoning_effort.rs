@@ -36,8 +36,8 @@ impl ReasoningEffort {
     pub fn to_budget(self, context_limit: usize) -> Option<usize> {
         match self {
             Self::None => Some(0),
-            Self::Low => Some(1024),
-            Self::Medium => Some(4096),
+            Self::Low => Some(1024.min(context_limit / 4)),
+            Self::Medium => Some(4096.min(context_limit / 3)),
             Self::High => Some(16384.min(context_limit / 2)),
             Self::Max => None,
         }
@@ -91,7 +91,8 @@ mod tests {
     fn test_reasoning_effort_budget() {
         assert_eq!(ReasoningEffort::None.to_budget(8192), Some(0));
         assert_eq!(ReasoningEffort::Low.to_budget(8192), Some(1024));
-        assert_eq!(ReasoningEffort::Medium.to_budget(8192), Some(4096));
+        assert_eq!(ReasoningEffort::Medium.to_budget(8192), Some(2730));
+        assert_eq!(ReasoningEffort::Medium.to_budget(32768), Some(4096));
         assert_eq!(ReasoningEffort::High.to_budget(8192), Some(4096));
         assert_eq!(ReasoningEffort::High.to_budget(65536), Some(16384));
         assert_eq!(ReasoningEffort::Max.to_budget(8192), None);

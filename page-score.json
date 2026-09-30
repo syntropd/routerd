@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "2b92c6f",
+ "rev": "9c77690",
  "dirty": true,
  "pages": [
   {
@@ -229,7 +229,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 176,
+   "lines": 197,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -264,7 +264,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/varlink_bridge/chat_completion.rs",
-   "lines": 137,
+   "lines": 147,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -418,7 +418,7 @@
   },
   {
    "path": "./crates/routerd-core/src/models/reasoning_effort.rs",
-   "lines": 99,
+   "lines": 100,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
@@ -614,7 +614,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/sse_transform.rs",
-   "lines": 218,
+   "lines": 236,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1

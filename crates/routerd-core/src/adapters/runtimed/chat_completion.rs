@@ -73,7 +73,17 @@ impl RuntimedAdapter {
                 crate::wire::FilteredItem::Reasoning(r) => reasoning_content.push_str(&r),
             }
         }
-        let final_content = if clean_content.is_empty() && !text.is_empty() && reasoning_content.is_empty() {
+        let final_content = if !clean_content.is_empty() {
+            clean_content
+        } else if finish == "length" {
+            if !reasoning_content.trim().is_empty() {
+                reasoning_content.clone()
+            } else if !text.trim().is_empty() {
+                text.to_string()
+            } else {
+                "[Response truncated during reasoning due to token limit]".to_string()
+            }
+        } else if !text.is_empty() && reasoning_content.is_empty() {
             text.to_string()
         } else {
             clean_content
