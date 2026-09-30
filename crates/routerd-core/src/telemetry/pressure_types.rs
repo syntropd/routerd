@@ -2,17 +2,12 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_INFERENCED_SOCKET: &str = "/run/syntrop/io.syntrop.Inference1";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum PressureLevel {
+    #[default]
     Normal,
     Elevated,
     Critical,
-}
-
-impl Default for PressureLevel {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,12 +7,11 @@ use routerd_core::adapters::create_adapter;
 use routerd_core::config::ProviderConfig;
 use routerd_core::models::{ChatCompletionRequest, ChatMessage, ProviderModelConfig};
 use serde_json::{json, Value};
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 
-fn cfg(socket: &PathBuf) -> ProviderConfig {
+fn cfg(socket: &Path) -> ProviderConfig {
     ProviderConfig {
         id: "syntrop-local".to_string(),
         name: "Syntrop Local".to_string(),

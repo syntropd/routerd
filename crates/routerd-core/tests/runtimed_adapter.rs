@@ -7,11 +7,11 @@ use routerd_core::adapters::create_adapter;
 use routerd_core::config::ProviderConfig;
 use routerd_core::models::{ChatCompletionRequest, ChatMessage};
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::UnixListener;
 
-fn cfg(socket: &PathBuf) -> ProviderConfig {
+fn cfg(socket: &Path) -> ProviderConfig {
     serde_json::from_value(json!({
         "id": "runtimed-local",
         "kind": "runtimed",

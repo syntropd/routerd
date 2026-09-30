@@ -32,6 +32,7 @@ impl RuntimedAdapter {
             .max_tokens
             .or(request.max_completion_tokens)
             .unwrap_or(256);
+        let image = request.extract_image_base64();
         let mut params = json!({
             "model": target_model,
             "prompt": prompt,
@@ -40,9 +41,9 @@ impl RuntimedAdapter {
             "top_k": 0,
             "top_p": request.top_p.unwrap_or(1.0),
             "seed": 0,
-            "image": Value::Null,
+            "image": image,
         });
-        if request.tools.as_ref().map_or(false, |t| !t.is_empty()) {
+        if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {
             params["grammar_type"] = json!("json");
         }
         if let Some(budget) = request.reasoning_budget() {
@@ -104,7 +105,7 @@ impl RuntimedAdapter {
         };
         let mut tool_calls = None;
         let mut finish_reason = finish.to_string();
-        if request.tools.as_ref().map_or(false, |t| !t.is_empty()) {
+        if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {
             if let Ok(val) = serde_json::from_str::<Value>(&final_content) {
                 if let Some(calls) = val.get("tool_calls").and_then(|v| serde_json::from_value::<Vec<crate::models::ToolCall>>(v.clone()).ok()) {
                     tool_calls = Some(calls);

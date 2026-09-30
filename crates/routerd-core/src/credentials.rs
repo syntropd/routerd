@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_file_and_systemd_credential() {
         let mut file = NamedTempFile::new().unwrap();
-        write!(file, " file_secret_token \n").unwrap();
+        writeln!(file, " file_secret_token ").unwrap();
         let path = file.path().to_str().unwrap();
 
         assert_eq!(

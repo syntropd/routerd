@@ -53,13 +53,11 @@ impl RouterEngine {
         };
 
         let mut last_error = None;
-        let mut attempts = 0;
 
-        for scored in ranked {
+        for (attempts, scored) in ranked.into_iter().enumerate() {
             if attempts > max_retries {
                 break;
             }
-            attempts += 1;
 
             debug!(
                 "Routing request to provider '{}' (model '{}', score: {:.2})",

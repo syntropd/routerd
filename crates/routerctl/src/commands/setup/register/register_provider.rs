@@ -5,6 +5,7 @@ use toml_edit::{Array, ArrayOfTables, DocumentMut, Item, Table, Value};
 pub(crate) const RUNTIMED_SOCKET: &str = "/run/syntrop/io.syntrop.Runtime1";
 
 /// Insert or update a provider by id. Re-running setup never duplicates.
+#[allow(clippy::too_many_arguments)]
 pub fn add_custom_provider(
     doc: &mut DocumentMut,
     id: &str,

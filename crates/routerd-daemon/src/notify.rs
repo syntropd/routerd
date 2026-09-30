@@ -81,10 +81,7 @@ pub fn send_notification_to(socket_path: &str, state: &str) -> io::Result<usize>
 
     let bytes = state.as_bytes();
     sendto_unix(&sock, bytes, SendFlags::empty(), &addr).map_err(|e| {
-        io::Error::new(
-            io::ErrorKind::Other,
-            format!("sendto_unix failed for sd_notify: {}", e),
-        )
+        io::Error::other(format!("sendto_unix failed for sd_notify: {}", e))
     })
 }
 

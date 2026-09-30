@@ -64,6 +64,36 @@ impl ChatMessage {
             self.content.to_string()
         }
     }
+
+    /// Extract base64 image data from OpenAI multimodal content payload if present.
+    pub fn extract_image_base64(&self) -> Option<String> {
+        if let Some(arr) = self.content.as_array() {
+            for item in arr {
+                let item_type = item.get("type").and_then(|t| t.as_str());
+                if item_type == Some("image_url") {
+                    if let Some(img_url) = item.get("image_url") {
+                        let url_str = if let Some(s) = img_url.as_str() {
+                            Some(s)
+                        } else {
+                            img_url.get("url").and_then(|u| u.as_str())
+                        };
+                        if let Some(url) = url_str {
+                            if let Some((_, b64)) = url.split_once(',') {
+                                return Some(b64.to_string());
+                            } else {
+                                return Some(url.to_string());
+                            }
+                        }
+                    }
+                } else if item_type == Some("image") {
+                    if let Some(b64) = item.get("image").or_else(|| item.get("data")).and_then(|s| s.as_str()) {
+                        return Some(b64.to_string());
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -114,13 +144,32 @@ impl ChatCompletionRequest {
     pub fn requested_tier(&self) -> Option<&str> {
         if let Some(t) = &self.tier { return Some(t.as_str()); }
         let m = self.model.as_str();
-        if m.starts_with("router:") { return Some(&m["router:".len()..]); }
+        if let Some(rest) = m.strip_prefix("router:") { return Some(rest); }
         if m == "fast" || m == "hard" { return Some(m); }
         None
     }
 
     pub fn reasoning_budget(&self) -> Option<usize> {
         self.reasoning_budget.or(self.max_thinking_tokens)
+    }
+
+    /// Extract base64 image data from messages or extra parameters if present.
+    pub fn extract_image_base64(&self) -> Option<String> {
+        for msg in self.messages.iter().rev() {
+            if let Some(img) = msg.extract_image_base64() {
+                return Some(img);
+            }
+        }
+        if let Some(img) = self.extra.get("image").or_else(|| self.extra.get("image_base64")) {
+            if let Some(s) = img.as_str() {
+                if let Some((_, b64)) = s.split_once(',') {
+                    return Some(b64.to_string());
+                } else {
+                    return Some(s.to_string());
+                }
+            }
+        }
+        None
     }
 }
 
@@ -183,55 +232,5 @@ pub struct ChatCompletionChunk {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn request(model: &str, tier: Option<&str>, max_tokens: Option<usize>) -> ChatCompletionRequest {
-        ChatCompletionRequest {
-            model: model.to_string(),
-            messages: vec![ChatMessage::new("user", serde_json::json!("hello"))],
-            max_tokens,
-            tier: tier.map(str::to_string),
-            ..Default::default()
-        }
-    }
-
-    #[test]
-    fn content_as_str_reads_all_shapes() {
-        let plain = ChatMessage::new("r", serde_json::json!("hi"));
-        assert_eq!(plain.content_as_str(), "hi");
-        let parts = ChatMessage::new("r", serde_json::json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]));
-        assert_eq!(parts.content_as_str(), "a b ");
-        let null_msg = ChatMessage::new("assistant", Value::Null);
-        assert_eq!(null_msg.content_as_str(), "");
-    }
-
-    #[test]
-    fn requested_tier_prefers_field_then_alias() {
-        assert_eq!(request("x", Some("hard"), None).requested_tier(), Some("hard"));
-        assert_eq!(request("router:fast", None, None).requested_tier(), Some("fast"));
-        assert_eq!(request("hard", None, None).requested_tier(), Some("hard"));
-        assert_eq!(request("llama", None, None).requested_tier(), None);
-    }
-
-    #[test]
-    fn token_estimates_floor_at_one_and_add_output() {
-        let mut req = request("router:fast", None, Some(100));
-        req.messages.clear();
-        assert_eq!(req.estimate_prompt_tokens(), 1);
-        assert_eq!(req.estimate_total_tokens(), 101);
-        let req = request("router:fast", None, None);
-        assert!(req.estimate_prompt_tokens() >= 1);
-        assert_eq!(req.estimate_total_tokens(), req.estimate_prompt_tokens() + 2048);
-    }
-
-    #[test]
-    fn reasoning_budget_prefers_explicit_then_max_thinking() {
-        let mut req = request("test", None, None);
-        assert_eq!(req.reasoning_budget(), None);
-        req.max_thinking_tokens = Some(500);
-        assert_eq!(req.reasoning_budget(), Some(500));
-        req.reasoning_budget = Some(1000);
-        assert_eq!(req.reasoning_budget(), Some(1000));
-    }
-}
+#[path = "chat_types_tests.rs"]
+mod tests;
