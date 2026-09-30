@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "9c77690",
+ "rev": "2016bf7",
  "dirty": true,
  "pages": [
   {
@@ -229,7 +229,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 197,
+   "lines": 195,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -579,7 +579,7 @@
   },
   {
    "path": "./crates/routerd-core/tests/runtimed_adapter.rs",
-   "lines": 223,
+   "lines": 242,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -614,7 +614,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/sse_transform.rs",
-   "lines": 236,
+   "lines": 255,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1

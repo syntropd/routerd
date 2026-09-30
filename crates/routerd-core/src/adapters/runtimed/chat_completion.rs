@@ -78,8 +78,6 @@ impl RuntimedAdapter {
         } else if finish == "length" {
             if !reasoning_content.trim().is_empty() {
                 reasoning_content.clone()
-            } else if !text.trim().is_empty() {
-                text.to_string()
             } else {
                 "[Response truncated during reasoning due to token limit]".to_string()
             }

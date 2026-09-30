@@ -25,7 +25,13 @@ pub fn clean_completion_response(response: &mut ChatCompletionResponse) {
                     FilteredItem::Reasoning(r) => reasoning.push_str(&r),
                 }
             }
-            choice.message.content = Value::String(clean_content);
+            choice.message.content = Value::String(if !clean_content.is_empty() {
+                clean_content
+            } else if choice.finish_reason.as_deref() == Some("length") {
+                if !reasoning.trim().is_empty() { reasoning.clone() } else { "[Response truncated during reasoning due to token limit]".to_string() }
+            } else {
+                clean_content
+            });
             if !reasoning.is_empty() {
                 choice.message.reasoning_content = match &choice.message.reasoning_content {
                     Some(prev) => Some(format!("{prev}{reasoning}")),
@@ -232,5 +238,18 @@ mod tests {
         clean_completion_response(&mut resp);
         assert_eq!(resp.choices[0].message.content_as_str(), "clean response");
         assert_eq!(resp.choices[0].message.reasoning_content, None);
+    }
+
+    #[test]
+    fn test_clean_completion_truncation_during_reasoning() {
+        let mut resp = ChatCompletionResponse {
+            id: "id3".into(), object: "chat.completion".into(), created: 0, model: "m".into(),
+            choices: vec![ChatChoice {
+                index: 0, message: ChatMessage::new("assistant", "<think>truncated thought"),
+                finish_reason: Some("length".into()),
+            }], usage: None,
+        };
+        clean_completion_response(&mut resp);
+        assert_eq!(resp.choices[0].message.content_as_str(), "truncated thought");
     }
 }

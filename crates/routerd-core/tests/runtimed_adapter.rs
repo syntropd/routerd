@@ -221,3 +221,22 @@ async fn stream_emits_single_chunk_then_done() {
     assert!(text.contains("data: [DONE]"), "missing terminator: {text}");
     let _ = std::fs::remove_file(&path);
 }
+
+#[tokio::test]
+async fn length_truncation_in_reasoning_falls_back() {
+    let path = socket_path("trunc");
+    let _ = std::fs::remove_file(&path);
+    let listener = UnixListener::bind(&path).unwrap();
+    let server = tokio::spawn(async move {
+        let (mut s, _) = listener.accept().await.unwrap();
+        let mut b = [0u8; 1024]; let _ = s.read(&mut b).await.unwrap();
+        let rep = json!({"parameters": {"result": {"text": "<think>partial thought", "prompt_tokens": 2, "completion_tokens": 3, "finish_reason": "length", "duration_ms": 10}}});
+        let mut v = serde_json::to_vec(&rep).unwrap(); v.push(0); s.write_all(&v).await.unwrap();
+    });
+    let adapter = create_adapter(&cfg(&path));
+    let res = adapter.chat_completion("gemma-4-E2B-it-Q4_K_M", &request()).await.unwrap();
+    server.await.unwrap();
+    assert_eq!(res.choices[0].message.content_as_str(), "partial thought");
+    assert_eq!(res.choices[0].message.reasoning_content.as_deref(), Some("partial thought"));
+    let _ = std::fs::remove_file(&path);
+}
