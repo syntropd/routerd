@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "eba80ce",
+ "rev": "2af9211",
  "dirty": false,
  "pages": [
   {
@@ -369,7 +369,7 @@
   },
   {
    "path": "./crates/routerd-core/src/lib.rs",
-   "lines": 37,
+   "lines": 40,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
