@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "2af9211",
+ "rev": "40e817d",
  "dirty": false,
  "pages": [
   {
@@ -467,14 +467,14 @@
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_chat.rs",
-   "lines": 109,
+   "lines": 151,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_stream.rs",
-   "lines": 105,
+   "lines": 147,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -830,6 +830,13 @@
    "reach": 0
   },
   {
+   "path": "./qa/tests/routing/cascade_tests.rs",
+   "lines": 130,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
    "path": "./qa/tests/routing/context_limits_tests.rs",
    "lines": 55,
    "bin_bytes": null,
@@ -852,7 +859,7 @@
   },
   {
    "path": "./qa/tests/routing_tests.rs",
-   "lines": 10,
+   "lines": 12,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
