@@ -23,7 +23,10 @@ pub use models::{
     FunctionCall, FunctionDefinition, ModelItem, ModelListResponse, ProviderModelConfig, ToolCall,
     ToolDefinition, UsageInfo,
 };
-pub use router::{DaemonStatusInfo, ProviderStatusInfo, RouterEngine};
+pub use router::{
+    CascadeDecision, CascadeRouter, DaemonStatusInfo, DowngradeDecision,
+    ElasticFamilyDowngrader, FamilyLadder, ProviderStatusInfo, RouterEngine, VramPressureLevel,
+};
 pub use scoring::{CandidateProvider, RequestProfile, ScoredCandidate, ScoringEngine};
 pub use telemetry::{PressureLevel, PressureMetrics, TelemetryClient};
 pub use wire::{
