@@ -120,8 +120,8 @@ impl ElasticFamilyDowngrader {
         let current_model = req.model.to_ascii_lowercase();
         let prompt_tokens = req.estimate_prompt_tokens();
 
-        let is_7b = current_model.contains("7b");
-        let is_1_5b = current_model.contains("1.5b");
+        let is_7b = current_model == self.ladder.model_7b.to_ascii_lowercase() || current_model.contains("7b");
+        let is_1_5b = current_model == self.ladder.model_1_5b.to_ascii_lowercase() || current_model.contains("1.5b");
 
         let target_spec = match pressure {
             VramPressureLevel::Normal => None,
@@ -206,5 +206,26 @@ mod tests {
         let decision = downgrader.evaluate(&mut req, VramPressureLevel::Critical);
         assert!(matches!(decision, DowngradeDecision::Downgraded { to, level: VramPressureLevel::Critical, .. } if to == "qwen2.5-0.5b"));
         assert_eq!(req.model, "qwen2.5-0.5b");
+    }
+
+    #[test]
+    fn test_custom_ladder_downgrade() {
+        let ladder = FamilyLadder {
+            model_7b: "custom-large".into(),
+            model_1_5b: "custom-mid".into(),
+            model_0_5b: "custom-small".into(),
+            context_7b: 16384,
+            context_1_5b: 16384,
+            context_0_5b: 16384,
+        };
+        let downgrader = ElasticFamilyDowngrader::new(ladder);
+        let mut req = ChatCompletionRequest {
+            model: "custom-large".into(),
+            messages: vec![ChatMessage::new("user", "test prompt")],
+            ..Default::default()
+        };
+        let decision = downgrader.evaluate(&mut req, VramPressureLevel::Elevated);
+        assert!(matches!(decision, DowngradeDecision::Downgraded { to, .. } if to == "custom-mid"));
+        assert_eq!(req.model, "custom-mid");
     }
 }
