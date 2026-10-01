@@ -3,6 +3,7 @@ use super::RouterEngine;
 use crate::adapters::ByteStream;
 use crate::error::{Result, RouterError};
 use crate::models::ChatCompletionRequest;
+use crate::router::cascade::{CascadeDecision, CascadeRouter, ElasticFamilyDowngrader, VramPressureLevel};
 use crate::scoring::{ScoredCandidate, ScoringEngine};
 use std::sync::atomic::Ordering;
 use tracing::{debug, warn};
@@ -17,8 +18,49 @@ impl RouterEngine {
         self.active_requests.fetch_add(1, Ordering::SeqCst);
         let _guard = ScopeActiveGuard(&self.active_requests);
 
-        let (req_profile, tier_cfg, thresholds, candidates) = self.prepare_routing(request).await?;
-        let ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
+        let mut req = request.clone();
+        let is_family = req.model.is_empty()
+            || req.model == "auto"
+            || req.model == "router:auto"
+            || req.model.to_ascii_lowercase().contains("7b")
+            || req.model == "qwen2.5-7b";
+
+        if is_family {
+            let cascade = CascadeRouter::default();
+            if let CascadeDecision::System1Cpu { model, .. } = cascade.classify(&req) {
+                debug!("CascadeRouter routed streaming query to CPU draft model '{}'", model);
+                req.model = model;
+            }
+        }
+
+        let (psi, hw_report) = tokio::join!(
+            self.telemetry.get_pressure(),
+            self.hardware_telemetry.get_report(),
+        );
+        let vram_used: u64 = hw_report.gpus.iter().map(|g| g.used_vram_bytes).sum();
+        let vram_total: u64 = hw_report.gpus.iter().map(|g| g.total_vram_bytes).sum();
+        let downgrader = ElasticFamilyDowngrader::default();
+        let pressure = downgrader.assess_pressure(
+            vram_used,
+            vram_total,
+            psi.memory_some_avg10 as f64,
+            psi.memory_full_avg10 as f64,
+        );
+        if pressure != VramPressureLevel::Normal {
+            let decision = downgrader.evaluate(&mut req, pressure);
+            debug!("ElasticFamilyDowngrader assessed {:?} streaming pressure: {:?}", pressure, decision);
+        }
+
+        let (mut req_profile, tier_cfg, thresholds, mut candidates) = self.prepare_routing(&req).await?;
+        let mut ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
+
+        if ranked.is_empty() && req.model != request.model {
+            req = request.clone();
+            let (rp, _, _, c) = self.prepare_routing(&req).await?;
+            req_profile = rp;
+            candidates = c;
+            ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
+        }
 
         if ranked.is_empty() {
             let total_tokens = req_profile.total_tokens();
@@ -73,7 +115,7 @@ impl RouterEngine {
                 None => continue,
             };
 
-            match entry.adapter.chat_completion_stream(&scored.model_name, request).await {
+            match entry.adapter.chat_completion_stream(&scored.model_name, &req).await {
                 Ok(stream) => {
                     let mut st = entry.stats.write().await;
                     st.is_healthy = true;
