@@ -30,6 +30,7 @@ fn cfg(socket: &Path) -> ProviderConfig {
             avg_latency_ms: 40.0,
             tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     }
 }

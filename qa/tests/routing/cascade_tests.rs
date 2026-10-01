@@ -57,6 +57,7 @@ fn build_cascade_config(base_url: &str) -> RouterConfig {
                 avg_latency_ms: 15.0,
                 tokens_per_second: 150.0,
                 tier: Some("fast".to_string()),
+                draft_model: None,
             },
             ProviderModelConfig {
                 name: "qwen2.5-1.5b".to_string(),
@@ -66,6 +67,7 @@ fn build_cascade_config(base_url: &str) -> RouterConfig {
                 avg_latency_ms: 30.0,
                 tokens_per_second: 100.0,
                 tier: Some("fast".to_string()),
+                draft_model: None,
             },
             ProviderModelConfig {
                 name: "qwen2.5-7b".to_string(),
@@ -75,6 +77,7 @@ fn build_cascade_config(base_url: &str) -> RouterConfig {
                 avg_latency_ms: 60.0,
                 tokens_per_second: 60.0,
                 tier: Some("fast".to_string()),
+                draft_model: None,
             },
         ],
     });

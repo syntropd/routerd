@@ -22,6 +22,7 @@ fn sample_candidate(id: &str, tier: &str, cost: f64, latency: f64, max_ctx: usiz
             avg_latency_ms: latency,
             tokens_per_second: 100.0,
             tier: Some(tier.to_string()),
+            draft_model: None,
         },
         psi_level: PressureLevel::Normal,
         psi_memory_some: 0.0,

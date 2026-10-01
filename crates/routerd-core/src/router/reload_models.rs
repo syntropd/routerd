@@ -101,6 +101,7 @@ impl RouterEngine {
                         avg_latency_ms: 50.0,
                         tokens_per_second: 30.0,
                         tier: None,
+                        draft_model: None,
                     });
                 }
             }
@@ -117,6 +118,7 @@ impl RouterEngine {
                     avg_latency_ms: 50.0,
                     tokens_per_second: 30.0,
                     tier: None,
+                    draft_model: None,
                 })
                 .collect();
 

@@ -24,6 +24,7 @@ pub struct ProviderModelConfig {
     pub avg_latency_ms: f64,
     pub tokens_per_second: f64,
     pub tier: Option<String>,
+    pub draft_model: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -44,6 +45,8 @@ enum ProviderModelConfigHelper {
         tokens_per_second: f64,
         #[serde(default)]
         tier: Option<String>,
+        #[serde(default)]
+        draft_model: Option<String>,
     },
 }
 
@@ -58,6 +61,7 @@ impl From<ProviderModelConfigHelper> for ProviderModelConfig {
                 avg_latency_ms: default_latency(),
                 tokens_per_second: default_tps(),
                 tier: None,
+                draft_model: None,
             },
             ProviderModelConfigHelper::Detailed {
                 name,
@@ -67,6 +71,7 @@ impl From<ProviderModelConfigHelper> for ProviderModelConfig {
                 avg_latency_ms,
                 tokens_per_second,
                 tier,
+                draft_model,
             } => Self {
                 name,
                 max_context_tokens,
@@ -75,6 +80,7 @@ impl From<ProviderModelConfigHelper> for ProviderModelConfig {
                 avg_latency_ms,
                 tokens_per_second,
                 tier,
+                draft_model,
             },
         }
     }

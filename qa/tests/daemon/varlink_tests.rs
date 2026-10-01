@@ -93,6 +93,7 @@ async fn test_varlink_server_e2e_communication() {
             avg_latency_ms: 30.0,
             tokens_per_second: 150.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
     let engine = Arc::new(RouterEngine::new(config));

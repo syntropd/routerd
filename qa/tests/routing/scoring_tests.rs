@@ -28,6 +28,7 @@ fn make_candidate(
             avg_latency_ms: latency_ms,
             tokens_per_second: tps,
             tier: Some(tier.to_string()),
+            draft_model: None,
         },
         psi_level: PressureLevel::Normal,
         psi_memory_some: 0.0,

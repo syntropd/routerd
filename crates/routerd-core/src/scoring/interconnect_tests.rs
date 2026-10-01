@@ -21,6 +21,7 @@ fn make_interconnect_candidate(id: &str, beta: Option<f64>) -> CandidateProvider
             avg_latency_ms: 50.0,
             tokens_per_second: 100.0,
             tier: Some("hard".to_string()),
+            draft_model: None,
         },
         psi_level: PressureLevel::Normal,
         psi_memory_some: 0.0,

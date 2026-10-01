@@ -47,6 +47,9 @@ impl RuntimedAdapter {
         if let Some(effort) = request.reasoning_effort {
             params["reasoning_effort"] = json!(effort.as_str());
         }
+        if let Some(draft) = self.draft_models.get(target_model) {
+            params["speculative_draft_model"] = json!(draft);
+        }
         let gen_timeout = self.compute_generate_timeout(request);
         let parameters = self
             .call_with_timeout("io.syntrop.Runtime1.Generate", params, gen_timeout)
@@ -93,11 +96,7 @@ impl RuntimedAdapter {
         } else {
             clean_content
         };
-        let final_reasoning = if reasoning_content.is_empty() {
-            None
-        } else {
-            Some(reasoning_content)
-        };
+        let final_reasoning = (!reasoning_content.is_empty()).then_some(reasoning_content);
         let mut tool_calls = None;
         let mut finish_reason = finish.to_string();
         if request.tools.as_ref().is_some_and(|t| !t.is_empty()) {

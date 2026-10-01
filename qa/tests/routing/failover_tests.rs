@@ -64,6 +64,7 @@ async fn test_provider_failover_retry_success() {
             avg_latency_ms: 10.0,
             tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
 
@@ -85,6 +86,7 @@ async fn test_provider_failover_retry_success() {
             avg_latency_ms: 150.0,
             tokens_per_second: 100.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
 
@@ -144,6 +146,7 @@ async fn test_provider_failover_exhaustion() {
             avg_latency_ms: 10.0,
             tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
 
@@ -165,6 +168,7 @@ async fn test_provider_failover_exhaustion() {
             avg_latency_ms: 20.0,
             tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
 
@@ -211,6 +215,7 @@ async fn test_streaming_dispatch_collects_chunks() {
             cost_per_input_token: 0.0, cost_per_output_token: 0.0,
             avg_latency_ms: 50.0, tokens_per_second: 200.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
     let engine = Arc::new(RouterEngine::new(config));

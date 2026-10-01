@@ -22,6 +22,7 @@ async fn test_adapter_factory_instantiation() {
             avg_latency_ms: 120.0,
             tokens_per_second: 280.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     };
     let adapter_openai = create_adapter(&p_openai);
@@ -46,6 +47,7 @@ async fn test_adapter_factory_instantiation() {
             avg_latency_ms: 350.0,
             tokens_per_second: 80.0,
             tier: Some("hard".to_string()),
+            draft_model: None,
         }],
     };
     let adapter_minimax = create_adapter(&p_minimax);
@@ -71,6 +73,7 @@ async fn test_adapter_factory_instantiation() {
             avg_latency_ms: 40.0,
             tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     };
     let adapter_runtimed = create_adapter(&p_runtimed);
@@ -95,6 +98,7 @@ async fn test_adapter_factory_instantiation() {
             avg_latency_ms: 40.0,
             tokens_per_second: 300.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     };
     let adapter_varlink = create_adapter(&p_varlink);

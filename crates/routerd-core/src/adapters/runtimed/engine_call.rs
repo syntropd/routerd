@@ -19,6 +19,7 @@ pub struct RuntimedAdapter {
     pub(super) id: String,
     pub(super) socket_path: PathBuf,
     pub(super) configured_models: Vec<String>,
+    pub(super) draft_models: std::collections::HashMap<String, String>,
     pub(super) timeout: Duration,
     pub(super) generate_timeout: Duration,
     pub(super) link_latency_nanos: u64,
@@ -32,10 +33,17 @@ impl RuntimedAdapter {
             &cfg.base_url
         };
         let hop = Duration::from_millis(cfg.timeout_ms.max(1000));
+        let mut draft_models = std::collections::HashMap::new();
+        for m in &cfg.models {
+            if let Some(ref d) = m.draft_model {
+                draft_models.insert(m.name.clone(), d.clone());
+            }
+        }
         Self {
             id: cfg.id.clone(),
             socket_path: PathBuf::from(p),
             configured_models: cfg.models.iter().map(|m| m.name.clone()).collect(),
+            draft_models,
             timeout: hop,
             generate_timeout: hop.max(MIN_GENERATE_TIMEOUT),
             link_latency_nanos: 0,

@@ -31,6 +31,7 @@ fn test_router_engine() -> Arc<RouterEngine> {
             avg_latency_ms: 50.0,
             tokens_per_second: 200.0,
             tier: Some("fast".to_string()),
+            draft_model: None,
         }],
     });
     Arc::new(RouterEngine::new(config))
