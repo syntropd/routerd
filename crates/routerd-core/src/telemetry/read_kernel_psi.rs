@@ -20,7 +20,7 @@ impl TelemetryClient {
                 return PressureMetrics {
                     level: PressureLevel::Elevated,
                     memory_some_avg10: 25.0,
-                    memory_full_avg10: 5.0,
+                    memory_full_avg10: 0.0,
                     cpu_some_avg10: 15.0,
                     io_some_avg10: 5.0,
                     source: "simulated:elevated".to_string(),
