@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "40e817d",
+ "rev": "4af23ae",
  "dirty": false,
  "pages": [
   {
@@ -229,7 +229,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 255,
+   "lines": 254,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -243,7 +243,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/engine_call.rs",
-   "lines": 210,
+   "lines": 218,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -425,7 +425,7 @@
   },
   {
    "path": "./crates/routerd-core/src/models/provider_models.rs",
-   "lines": 118,
+   "lines": 124,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
@@ -502,7 +502,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/reload_models.rs",
-   "lines": 158,
+   "lines": 160,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -523,7 +523,7 @@
   },
   {
    "path": "./crates/routerd-core/src/scoring/interconnect_tests.rs",
-   "lines": 151,
+   "lines": 152,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -558,7 +558,7 @@
   },
   {
    "path": "./crates/routerd-core/src/scoring/scoring_tests.rs",
-   "lines": 242,
+   "lines": 243,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -782,14 +782,14 @@
   },
   {
    "path": "./qa/tests/daemon/varlink_tests.rs",
-   "lines": 187,
+   "lines": 188,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/gateway/chat_gateway_tests.rs",
-   "lines": 160,
+   "lines": 161,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -817,21 +817,21 @@
   },
   {
    "path": "./qa/tests/routing/adapter_tests.rs",
-   "lines": 103,
+   "lines": 107,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/bridge_tests.rs",
-   "lines": 193,
+   "lines": 194,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/cascade_tests.rs",
-   "lines": 130,
+   "lines": 218,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -845,14 +845,14 @@
   },
   {
    "path": "./qa/tests/routing/failover_tests.rs",
-   "lines": 232,
+   "lines": 237,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./qa/tests/routing/scoring_tests.rs",
-   "lines": 219,
+   "lines": 220,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
