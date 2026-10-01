@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "9fa0f4b",
+ "rev": "eba80ce",
  "dirty": false,
  "pages": [
   {
@@ -453,7 +453,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/cascade/elastic_downgrade.rs",
-   "lines": 210,
+   "lines": 231,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
