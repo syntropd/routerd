@@ -1,5 +1,4 @@
-//! OpenAI-compatible /v1/audio HTTP gateway endpoints (transcriptions & speech).
-
+use super::audio_codec::{encode_wav_header, extract_multipart_field, parse_multipart_boundary};
 use super::images_codec::{base64_decode, base64_encode};
 use axum::body::Bytes;
 use axum::extract::State;
@@ -110,15 +109,17 @@ pub async fn audio_transcriptions_handler(
         };
         (b64, req.language, req.response_format)
     } else if ct.contains("multipart/form-data") {
-        // Parse multipart body boundaries
+        let boundary = parse_multipart_boundary(ct);
         let raw = &body[..];
-        let file_bytes = match extract_multipart_field(raw, "file") {
+        let file_bytes = match extract_multipart_field(raw, "file", boundary) {
             Some(b) if !b.is_empty() => b,
             _ => return bad_request("file field missing in multipart payload"),
         };
         let b64 = base64_encode(file_bytes);
-        let lang = extract_multipart_field(raw, "language").and_then(|b| std::str::from_utf8(b).ok().map(String::from));
-        let fmt = extract_multipart_field(raw, "response_format").and_then(|b| std::str::from_utf8(b).ok().map(String::from));
+        let lang = extract_multipart_field(raw, "language", boundary)
+            .and_then(|b| std::str::from_utf8(b).ok().map(|s| s.trim().to_string()));
+        let fmt = extract_multipart_field(raw, "response_format", boundary)
+            .and_then(|b| std::str::from_utf8(b).ok().map(|s| s.trim().to_string()));
         (b64, lang, fmt)
     } else {
         if body.is_empty() {
@@ -205,38 +206,4 @@ pub async fn audio_speech_handler(
                 .into_response()
         }
     }
-}
-
-fn extract_multipart_field<'a>(data: &'a [u8], name: &str) -> Option<&'a [u8]> {
-    let needle = format!("name=\"{name}\"");
-    let pos = data.windows(needle.len()).position(|w| w == needle.as_bytes())?;
-    let after_header = &data[pos + needle.len()..];
-    let delim = b"\r\n\r\n";
-    let body_start = after_header.windows(4).position(|w| w == delim)? + 4;
-    let payload = &after_header[body_start..];
-    let end = payload.windows(2).position(|w| w == b"\r\n").unwrap_or(payload.len());
-    Some(&payload[..end])
-}
-
-fn encode_wav_header(sample_rate: u32, channels: u16, pcm: &[u8]) -> Vec<u8> {
-    let data_len = pcm.len() as u32;
-    let riff_size = 36 + data_len;
-    let byte_rate = sample_rate * channels as u32 * 2;
-    let block_align = channels * 2;
-
-    let mut buf = Vec::with_capacity(44 + pcm.len());
-    buf.extend_from_slice(b"RIFF");
-    buf.extend_from_slice(&riff_size.to_le_bytes());
-    buf.extend_from_slice(b"WAVEfmt ");
-    buf.extend_from_slice(&16u32.to_le_bytes());
-    buf.extend_from_slice(&1u16.to_le_bytes());
-    buf.extend_from_slice(&channels.to_le_bytes());
-    buf.extend_from_slice(&sample_rate.to_le_bytes());
-    buf.extend_from_slice(&byte_rate.to_le_bytes());
-    buf.extend_from_slice(&block_align.to_le_bytes());
-    buf.extend_from_slice(&16u16.to_le_bytes());
-    buf.extend_from_slice(b"data");
-    buf.extend_from_slice(&data_len.to_le_bytes());
-    buf.extend_from_slice(pcm);
-    buf
 }

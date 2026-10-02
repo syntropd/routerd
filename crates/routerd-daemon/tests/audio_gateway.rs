@@ -170,4 +170,33 @@ async fn test_audio_transcriptions_and_speech_flow() {
 
     let res_bad = app.clone().oneshot(req_bad).await.unwrap();
     assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+
+    // Test 6: Multipart form-data transcription request with internal binary CRLF
+    let boundary = "----TestBoundary12345";
+    let mut mp_body = Vec::new();
+    mp_body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+    mp_body.extend_from_slice(b"Content-Disposition: form-data; name=\"file\"; filename=\"speech.pcm\"\r\n");
+    mp_body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
+    let binary_audio = vec![0x00, 0x01, 0x0D, 0x0A, 0x02, 0x03, 0x0D, 0x0A, 0x04, 0x05];
+    mp_body.extend_from_slice(&binary_audio);
+    mp_body.extend_from_slice(format!("\r\n--{boundary}\r\n").as_bytes());
+    mp_body.extend_from_slice(b"Content-Disposition: form-data; name=\"language\"\r\n\r\n");
+    mp_body.extend_from_slice(b"en");
+    mp_body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let req_mp = Request::builder()
+        .method("POST")
+        .uri("/v1/audio/transcriptions")
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(mp_body))
+        .unwrap();
+
+    let res_mp = app.clone().oneshot(req_mp).await.unwrap();
+    assert_eq!(res_mp.status(), StatusCode::OK);
+    let body_mp = res_mp.into_body().collect().await.unwrap().to_bytes();
+    let val_mp: Value = serde_json::from_slice(&body_mp).unwrap();
+    assert_eq!(val_mp["text"], "syntrop transcribed speech stream");
 }

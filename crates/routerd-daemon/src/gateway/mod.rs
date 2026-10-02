@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod audio_codec;
 pub mod chat;
 pub mod health;
 pub mod images;

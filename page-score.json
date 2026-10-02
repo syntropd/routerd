@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "779a0a0",
+ "rev": "e6a396c",
  "dirty": true,
  "pages": [
   {
@@ -648,8 +648,15 @@
    "reach": 2
   },
   {
+   "path": "./crates/routerd-daemon/src/gateway/audio_codec.rs",
+   "lines": 117,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
    "path": "./crates/routerd-daemon/src/gateway/audio.rs",
-   "lines": 242,
+   "lines": 209,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -684,7 +691,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 35,
+   "lines": 36,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -761,7 +768,7 @@
   },
   {
    "path": "./crates/routerd-daemon/tests/audio_gateway.rs",
-   "lines": 173,
+   "lines": 202,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
