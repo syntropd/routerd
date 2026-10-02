@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "6b05e95",
- "dirty": false,
+ "rev": "ee0644c",
+ "dirty": true,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -662,8 +662,15 @@
    "reach": 1
   },
   {
+   "path": "./crates/routerd-daemon/src/gateway/images.rs",
+   "lines": 215,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 22,
+   "lines": 25,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -737,6 +744,13 @@
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 3
+  },
+  {
+   "path": "./crates/routerd-daemon/tests/images_gateway.rs",
+   "lines": 148,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
   },
   {
    "path": "./qa/tests/cli_tests.rs",
