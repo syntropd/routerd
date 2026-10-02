@@ -13,7 +13,7 @@ pub async fn run_status(client: &RouterctlClient, json_output: bool) -> Result<(
     println!("{}", "=== routerd Daemon Status ===".bold().cyan());
 
     let status = status_val.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
-    let version = status_val.get("version").and_then(|v| v.as_str()).unwrap_or("0.3.0");
+    let version = status_val.get("version").and_then(|v| v.as_str()).unwrap_or(env!("CARGO_PKG_VERSION"));
     let uptime = status_val.get("uptime_seconds").and_then(|v| v.as_u64()).unwrap_or(0);
     let total_reqs = status_val.get("total_requests").and_then(|v| v.as_u64()).unwrap_or(0);
     let active_reqs = status_val.get("active_requests").and_then(|v| v.as_u64()).unwrap_or(0);

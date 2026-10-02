@@ -72,7 +72,7 @@ async fn main() -> Result<()> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    info!("Starting routerd v0.3.0");
+    info!("Starting routerd v{}", env!("CARGO_PKG_VERSION"));
 
     let listen_tcp = cli.listen_tcp.unwrap_or_else(|| config.daemon.listen_tcp.clone());
     let listen_unix = cli.listen_unix.unwrap_or_else(|| PathBuf::from(&config.daemon.listen_unix));

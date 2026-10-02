@@ -148,7 +148,7 @@ pub fn handle_get_info() -> VarlinkReply {
     VarlinkReply::ok(json!({
         "vendor": "syntropd",
         "product": "routerd",
-        "version": "0.3.0",
+        "version": env!("CARGO_PKG_VERSION"),
         "url": "https://github.com/syntropd/routerd",
         "interfaces": [
             "org.varlink.service",
