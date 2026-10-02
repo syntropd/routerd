@@ -42,13 +42,14 @@ impl RuntimedAdapter {
         if let Some(effort) = request.reasoning_effort {
             params["reasoning_effort"] = json!(effort.as_str());
         }
-        let psi = crate::telemetry::TelemetryClient::read_kernel_or_simulated_psi();
+        let psi = self.telemetry.get_pressure().await;
+        let tuning = crate::telemetry::pressure_types::poll_tuning_config();
         let (k_draft, effective_max_tokens) = if psi.is_memory_pressure_spike() {
             debug!("Dynamic PSI pressure spike: shortening speculative horizon K->1 and clamping tokens");
             let _ = self.call("io.syntrop.Runtime1.CompactKvCache", json!({})).await;
-            (1, max_tokens.min(128))
+            (1, max_tokens.min(tuning.max_tokens_clamp))
         } else {
-            (4, max_tokens)
+            (tuning.k_draft_horizon, max_tokens)
         };
 
         if psi.is_cpu_contention_spike() {
@@ -243,12 +244,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_tool_calls_invalid_json_returns_none() {
+    fn parse_tool_calls_negative_cases() {
         assert!(parse_tool_calls_from_content("not json").is_none());
-    }
-
-    #[test]
-    fn parse_tool_calls_no_tool_info_returns_none() {
         assert!(parse_tool_calls_from_content(r#"{"message": "hello"}"#).is_none());
     }
 }

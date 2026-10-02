@@ -23,6 +23,7 @@ pub struct RuntimedAdapter {
     pub(super) timeout: Duration,
     pub(super) generate_timeout: Duration,
     pub(super) link_latency_nanos: u64,
+    pub(super) telemetry: crate::telemetry::TelemetryClient,
 }
 
 impl RuntimedAdapter {
@@ -47,7 +48,13 @@ impl RuntimedAdapter {
             timeout: hop,
             generate_timeout: hop.max(MIN_GENERATE_TIMEOUT),
             link_latency_nanos: 0,
+            telemetry: crate::telemetry::TelemetryClient::new(crate::telemetry::DEFAULT_INFERENCED_SOCKET),
         }
+    }
+
+    pub fn with_telemetry(mut self, telemetry: crate::telemetry::TelemetryClient) -> Self {
+        self.telemetry = telemetry;
+        self
     }
 
     pub fn with_link_latency(mut self, latency_nanos: u64) -> Self {
