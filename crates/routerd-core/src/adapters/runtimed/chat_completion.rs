@@ -15,18 +15,13 @@ impl RuntimedAdapter {
         request: &ChatCompletionRequest,
     ) -> Result<ChatCompletionResponse> {
         let mut prompt = Self::extract_user_prompt(request);
-        if let Some(tools) = &request.tools {
-            if !tools.is_empty() {
-                if let Ok(tools_json) = serde_json::to_string(tools) {
-                    prompt.push_str(&format!("\nTools: {}\n", tools_json));
-                }
+        if let Some(tools) = request.tools.as_ref().filter(|t| !t.is_empty()) {
+            if let Ok(tools_json) = serde_json::to_string(tools) {
+                prompt.push_str(&format!("\nTools: {}\n", tools_json));
             }
         }
         debug!("runtimed [{}]: calling Generate for {}", self.id, target_model);
-        let max_tokens = request
-            .max_tokens
-            .or(request.max_completion_tokens)
-            .unwrap_or(256);
+        let max_tokens = request.max_tokens.or(request.max_completion_tokens).unwrap_or(256);
         let image = request.extract_image_base64();
         let mut params = json!({
             "model": target_model,
@@ -47,8 +42,25 @@ impl RuntimedAdapter {
         if let Some(effort) = request.reasoning_effort {
             params["reasoning_effort"] = json!(effort.as_str());
         }
+        let psi = crate::telemetry::TelemetryClient::read_kernel_or_simulated_psi();
+        let (k_draft, effective_max_tokens) = if psi.is_memory_pressure_spike() {
+            debug!("Dynamic PSI pressure spike: shortening speculative horizon K->1 and clamping tokens");
+            let _ = self.call("io.syntrop.Runtime1.CompactKvCache", json!({})).await;
+            (1, max_tokens.min(128))
+        } else {
+            (4, max_tokens)
+        };
+
+        if psi.is_cpu_contention_spike() {
+            debug!("CPU scheduler contention spike ({} us); cooperative yielding within 250ms deadline", psi.runqueue_latency_us);
+            tokio::task::yield_now().await;
+        }
+
+        params["max_tokens"] = json!(effective_max_tokens);
+
         if let Some(draft) = self.draft_models.get(target_model) {
             params["speculative_draft_model"] = json!(draft);
+            params["k_draft"] = json!(k_draft);
         }
         let gen_timeout = self.compute_generate_timeout(request);
         let parameters = self
@@ -56,22 +68,10 @@ impl RuntimedAdapter {
             .await?;
         let result = parameters.get("result").cloned().unwrap_or(Value::Null);
         let text = result.get("text").and_then(|t| t.as_str()).unwrap_or("");
-        let prompt_tok = result
-            .get("prompt_tokens")
-            .and_then(|t| t.as_u64())
-            .unwrap_or(0) as usize;
-        let comp_tok = result
-            .get("completion_tokens")
-            .and_then(|t| t.as_u64())
-            .unwrap_or(0) as usize;
-        let finish = result
-            .get("finish_reason")
-            .and_then(|f| f.as_str())
-            .unwrap_or("stop");
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs();
+        let prompt_tok = result.get("prompt_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as usize;
+        let comp_tok = result.get("completion_tokens").and_then(|t| t.as_u64()).unwrap_or(0) as usize;
+        let finish = result.get("finish_reason").and_then(|f| f.as_str()).unwrap_or("stop");
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
         let mut filter = crate::wire::ThinkFilter::new();
         let mut items = filter.process(text);
         items.extend(filter.flush());

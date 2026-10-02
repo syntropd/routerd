@@ -14,6 +14,8 @@ impl TelemetryClient {
                     memory_full_avg10: 30.0,
                     cpu_some_avg10: 20.0,
                     io_some_avg10: 10.0,
+                    runqueue_latency_us: 85_000,
+                    ebpf_active: false,
                     source: "simulated:critical".to_string(),
                 };
             } else if sim_lower == "elevated" {
@@ -23,6 +25,8 @@ impl TelemetryClient {
                     memory_full_avg10: 0.0,
                     cpu_some_avg10: 15.0,
                     io_some_avg10: 5.0,
+                    runqueue_latency_us: 35_000,
+                    ebpf_active: false,
                     source: "simulated:elevated".to_string(),
                 };
             }
@@ -59,6 +63,8 @@ impl TelemetryClient {
                     memory_full_avg10: mem_full,
                     cpu_some_avg10: 0.0,
                     io_some_avg10: 0.0,
+                    runqueue_latency_us: 120,
+                    ebpf_active: false,
                     source: "kernel:/proc/pressure/memory".to_string(),
                 };
             }

@@ -71,78 +71,87 @@ impl TelemetryClient {
         let (reader, mut writer) = stream.into_split();
         let mut reader = BufReader::new(reader);
 
-        let req = json!({
-            "method": "io.syntrop.Inference1.GetPressure",
+        let mut req = json!({
+            "method": "io.syntrop.Telemetry1.GetKernelPressure",
             "parameters": {}
         });
         let mut req_bytes = serde_json::to_vec(&req)?;
-        req_bytes.push(0); // NUL terminator for Varlink
+        req_bytes.push(0);
 
         timeout(RPC_TIMEOUT, writer.write_all(&req_bytes))
             .await
             .map_err(|_| RouterError::Timeout("Varlink write timed out".into()))??;
 
         let mut buf = Vec::with_capacity(512);
-
         timeout(RPC_TIMEOUT, reader.read_until(0, &mut buf))
             .await
             .map_err(|_| RouterError::Timeout("Varlink read timed out".into()))??;
-
         if buf.last() == Some(&0) {
             buf.pop();
         }
 
-        if buf.is_empty() {
-            return Err(RouterError::Varlink("Empty Varlink response from inferenced".into()));
+        let mut resp: Value = serde_json::from_slice(&buf).unwrap_or(Value::Null);
+        let mut is_telemetry1 = true;
+        if resp.get("error").is_some() {
+            // Fallback to io.syntrop.Inference1.GetPressure
+            req = json!({
+                "method": "io.syntrop.Inference1.GetPressure",
+                "parameters": {}
+            });
+            req_bytes = serde_json::to_vec(&req)?;
+            req_bytes.push(0);
+            timeout(RPC_TIMEOUT, writer.write_all(&req_bytes))
+                .await
+                .map_err(|_| RouterError::Timeout("Varlink write timed out".into()))??;
+
+            buf.clear();
+            timeout(RPC_TIMEOUT, reader.read_until(0, &mut buf))
+                .await
+                .map_err(|_| RouterError::Timeout("Varlink read timed out".into()))??;
+            if buf.last() == Some(&0) {
+                buf.pop();
+            }
+            resp = serde_json::from_slice(&buf)?;
+            is_telemetry1 = false;
         }
 
-        let resp: Value = serde_json::from_slice(&buf)?;
         if let Some(err) = resp.get("error").and_then(|e| e.as_str()) {
             return Err(RouterError::Varlink(format!("Inferenced error reply: {}", err)));
         }
 
         let params = resp.get("parameters").cloned().unwrap_or(Value::Null);
-        let level_str = params
-            .get("level")
-            .and_then(|v| v.as_str())
-            .unwrap_or("Normal");
+        let mem_some = params.get("memory_some").and_then(|v| v.as_f64()).map(|f| f as f32).unwrap_or(0.0);
+        let mem_full = params.get("memory_full").and_then(|v| v.as_f64()).map(|f| f as f32).unwrap_or(0.0);
+        let cpu_some = params.get("cpu_some").and_then(|v| v.as_f64()).map(|f| f as f32).unwrap_or(0.0);
+        let io_some = params.get("io_some").and_then(|v| v.as_f64()).map(|f| f as f32).unwrap_or(0.0);
+        let runqueue_latency_us = params.get("runqueue_latency_us").and_then(|v| v.as_u64()).unwrap_or(0);
+        let ebpf_active = params.get("ebpf_active").and_then(|v| v.as_bool()).unwrap_or(false);
 
-        let level = match level_str.to_ascii_lowercase().as_str() {
-            "critical" => PressureLevel::Critical,
-            "elevated" => PressureLevel::Elevated,
-            _ => PressureLevel::Normal,
+        let level = if mem_full > 10.0 || mem_some > 40.0 || io_some > 50.0 || runqueue_latency_us > 100_000 {
+            PressureLevel::Critical
+        } else if mem_some > 15.0 || io_some > 20.0 || cpu_some > 60.0 || runqueue_latency_us > 40_000 {
+            PressureLevel::Elevated
+        } else {
+            PressureLevel::Normal
         };
 
-        let mem_some = params
-            .get("memory_some")
-            .and_then(|v| v.as_f64())
-            .map(|f| f as f32)
-            .unwrap_or(0.0);
+        let source = if is_telemetry1 {
+            "varlink:io.syntrop.Telemetry1".to_string()
+        } else {
+            "varlink:io.syntrop.Inference1".to_string()
+        };
 
-        let cpu_some = params
-            .get("cpu_some")
-            .and_then(|v| v.as_f64())
-            .map(|f| f as f32)
-            .unwrap_or(0.0);
-
-        let io_some = params
-            .get("io_some")
-            .and_then(|v| v.as_f64())
-            .map(|f| f as f32)
-            .unwrap_or(0.0);
-
-        debug!(
-            "Queried inferenced PSI via Varlink: level={:?}, mem_some={}",
-            level, mem_some
-        );
+        debug!("Queried PSI via Varlink: level={:?}, mem_some={}, source={}", level, mem_some, source);
 
         Ok(PressureMetrics {
             level,
             memory_some_avg10: mem_some,
-            memory_full_avg10: 0.0,
+            memory_full_avg10: mem_full,
             cpu_some_avg10: cpu_some,
             io_some_avg10: io_some,
-            source: "varlink:io.syntrop.Inference1".to_string(),
+            runqueue_latency_us,
+            ebpf_active,
+            source,
         })
     }
 }
@@ -157,6 +166,7 @@ mod tests {
         let m = client.get_pressure().await;
         assert!(!m.source.is_empty());
         assert_ne!(m.source, "varlink:io.syntrop.Inference1");
+        assert_ne!(m.source, "varlink:io.syntrop.Telemetry1");
         let cached = client.get_pressure().await;
         assert_eq!(cached.source, m.source);
     }

@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "4af23ae",
- "dirty": false,
+ "rev": "c4e8336",
+ "dirty": true,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -467,14 +467,14 @@
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_chat.rs",
-   "lines": 151,
+   "lines": 163,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_stream.rs",
-   "lines": 147,
+   "lines": 159,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -579,7 +579,7 @@
   },
   {
    "path": "./crates/routerd-core/src/telemetry/pressure_types.rs",
-   "lines": 47,
+   "lines": 80,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -593,14 +593,14 @@
   },
   {
    "path": "./crates/routerd-core/src/telemetry/query_varlink.rs",
-   "lines": 163,
+   "lines": 173,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-core/src/telemetry/read_kernel_psi.rs",
-   "lines": 99,
+   "lines": 105,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

@@ -51,6 +51,18 @@ impl RouterEngine {
             debug!("ElasticFamilyDowngrader assessed {:?} streaming pressure: {:?}", pressure, decision);
         }
 
+        if psi.is_memory_pressure_spike() {
+            debug!("Dynamic PSI memory spike (some={}, full={}); streaming admission controller clamping tokens", psi.memory_some_avg10, psi.memory_full_avg10);
+            if let Some(ref mut max_tok) = req.max_tokens {
+                *max_tok = (*max_tok).min(128);
+            }
+        }
+
+        if psi.is_cpu_contention_spike() {
+            debug!("CPU runqueue latency spike ({} us); yielding cooperative streaming time slice", psi.runqueue_latency_us);
+            tokio::task::yield_now().await;
+        }
+
         let (mut req_profile, tier_cfg, thresholds, mut candidates) = self.prepare_routing(&req).await?;
         let mut ranked = ScoringEngine::rank_candidates(&req_profile, &candidates, &tier_cfg, &thresholds);
 
