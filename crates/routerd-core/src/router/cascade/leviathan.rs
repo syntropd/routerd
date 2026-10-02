@@ -133,7 +133,7 @@ pub fn sample_leviathan_speculation(
         }
     }
 
-    let bonus_token = if !hit_rejection && accepted_count == draft_tokens.len() {
+    let bonus_token = if !draft_tokens.is_empty() && !hit_rejection && accepted_count == draft_tokens.len() {
         if let Some(bonus) = bonus_candidate {
             accepted_tokens.push(bonus);
             Some(bonus)
@@ -154,15 +154,22 @@ pub fn sample_leviathan_speculation(
 }
 
 fn sample_categorical(probs: &[f32], total_mass: f32, rand_source: &mut impl FnMut() -> f32) -> u32 {
+    if probs.is_empty() {
+        return 0;
+    }
     let r = rand_source().clamp(0.0, 1.0) * total_mass.max(1e-8);
     let mut cumsum = 0.0f32;
+    let mut last_valid = 0;
     for (idx, &p) in probs.iter().enumerate() {
+        if p > 0.0 {
+            last_valid = idx;
+        }
         cumsum += p;
         if r <= cumsum {
             return idx as u32;
         }
     }
-    (probs.len().saturating_sub(1)) as u32
+    last_valid as u32
 }
 
 #[cfg(test)]
@@ -215,5 +222,20 @@ mod tests {
         assert_eq!(res.accepted_tokens.len(), 1);
         // Residual is strictly at token 2 (p=0.9, q=0.1 -> diff=0.8)
         assert_eq!(res.accepted_tokens[0], 2);
+    }
+
+    #[test]
+    fn test_sample_categorical_zero_prob_tails() {
+        let probs = vec![1.0, 0.0];
+        let tok = sample_categorical(&probs, 1.0, &mut || 1.0);
+        assert_eq!(tok, 0);
+    }
+
+    #[test]
+    fn test_empty_draft_no_bonus() {
+        let res = sample_leviathan_speculation(&[], &[], &[], || 0.1, Some(99));
+        assert_eq!(res.accepted_count, 0);
+        assert_eq!(res.bonus_token, None);
+        assert!(res.accepted_tokens.is_empty());
     }
 }

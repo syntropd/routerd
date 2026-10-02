@@ -67,7 +67,6 @@ tier = "fast"
 
 [[providers.models]]
 name = "deepseek-r1-distill-qwen-1.5b"
-draft_model = "deepseek-r1-distill-qwen-1.5b"
 max_context_tokens = 32768
 cost_per_input_token = 0.0
 cost_per_output_token = 0.0

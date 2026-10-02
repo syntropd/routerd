@@ -43,6 +43,11 @@ impl CascadeRouter {
         }
     }
 
+    /// Create a new CascadeRouter from a SpeculativePair definition.
+    pub fn from_speculative_pair(pair: &super::leviathan::SpeculativePair) -> Self {
+        Self::new(&pair.cpu_draft_model, &pair.gpu_target_model)
+    }
+
     /// Classify a chat completion request into System 1 (CPU) or System 2 (GPU).
     pub fn classify(&self, req: &ChatCompletionRequest) -> CascadeDecision {
         // Rule 1: Tool calling requires deep System 2 GPU processing
@@ -157,5 +162,13 @@ mod tests {
         };
         let decision = router.classify(&req);
         assert!(matches!(decision, CascadeDecision::System2Gpu { .. }));
+    }
+
+    #[test]
+    fn test_from_speculative_pair() {
+        let pair = super::super::leviathan::SpeculativePair::qwen_default();
+        let router = CascadeRouter::from_speculative_pair(&pair);
+        assert_eq!(router.cpu_model, "qwen2.5-0.5b");
+        assert_eq!(router.gpu_model, "qwen2.5-7b");
     }
 }
