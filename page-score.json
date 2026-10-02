@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "b036434",
+ "rev": "9e811e7",
  "dirty": true,
  "pages": [
   {
@@ -662,15 +662,22 @@
    "reach": 1
   },
   {
+   "path": "./crates/routerd-daemon/src/gateway/images_codec.rs",
+   "lines": 89,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
    "path": "./crates/routerd-daemon/src/gateway/images.rs",
-   "lines": 215,
+   "lines": 239,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 25,
+   "lines": 29,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -747,7 +754,7 @@
   },
   {
    "path": "./crates/routerd-daemon/tests/images_gateway.rs",
-   "lines": 148,
+   "lines": 205,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0

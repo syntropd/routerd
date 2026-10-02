@@ -51,39 +51,20 @@ pub struct ImageGenerationResponse {
     pub data: Vec<ImageObject>,
 }
 
-pub fn base64_encode(data: &[u8]) -> String {
-    const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    for c in data.chunks(3) {
-        let b = ((c[0] as u32) << 16)
-            | (if c.len() > 1 { (c[1] as u32) << 8 } else { 0 })
-            | (if c.len() > 2 { c[2] as u32 } else { 0 });
-        out.push(T[((b >> 18) & 0x3f) as usize] as char);
-        out.push(T[((b >> 12) & 0x3f) as usize] as char);
-        out.push(if c.len() > 1 { T[((b >> 6) & 0x3f) as usize] as char } else { '=' });
-        out.push(if c.len() > 2 { T[(b & 0x3f) as usize] as char } else { '=' });
-    }
-    out
-}
-
-fn parse_dimensions(size: Option<&str>) -> (u32, u32) {
-    size.and_then(|s| {
-        let mut parts = s.split('x');
-        let w = parts.next()?.trim().parse::<u32>().ok()?;
-        let h = parts.next()?.trim().parse::<u32>().ok()?;
-        if (1..=4096).contains(&w) && (1..=4096).contains(&h) {
-            Some((w, h))
-        } else {
-            None
-        }
-    })
-    .unwrap_or((512, 512))
-}
+pub use super::images_codec::{base64_decode, base64_encode, parse_dimensions};
 
 fn resolve_runtime_socket() -> PathBuf {
     std::env::var("SYNTROP_RUNTIME_SOCKET")
         .map(|s| PathBuf::from(s.trim()))
         .unwrap_or_else(|_| PathBuf::from("/run/syntrop/io.syntrop.Runtime1"))
+}
+
+fn bad_request(msg: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(json!({"error": {"message": msg, "type": "invalid_request_error"}})),
+    )
+        .into_response()
 }
 
 async fn call_generate_visual(
@@ -107,7 +88,10 @@ async fn call_generate_visual(
     }))
     .map_err(|e| e.to_string())?;
     req_bytes.push(0);
-    stream.write_all(&req_bytes).await.map_err(|e| e.to_string())?;
+    stream
+        .write_all(&req_bytes)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut buf = Vec::with_capacity(4096);
     let mut chunk = [0u8; 1024];
@@ -122,7 +106,10 @@ async fn call_generate_visual(
             if let Some(err) = reply.get("error").and_then(|e| e.as_str()) {
                 return Err(err.to_string());
             }
-            return reply.get("parameters").cloned().ok_or_else(|| "missing params".into());
+            return reply
+                .get("parameters")
+                .cloned()
+                .ok_or_else(|| "missing params".into());
         }
     }
 }
@@ -133,25 +120,39 @@ pub async fn image_generations_handler(
 ) -> Response {
     let prompt = request.prompt.trim();
     if prompt.is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": {"message": "prompt is required", "type": "invalid_request_error"}})),
-        )
-            .into_response();
+        return bad_request("prompt is required");
     }
 
-    let (width, height) = parse_dimensions(request.size.as_deref());
+    let (width, height) = match parse_dimensions(request.size.as_deref()) {
+        Ok(dims) => dims,
+        Err(e) => return bad_request(e),
+    };
     let count = request.n.unwrap_or(1).clamp(1, 10);
     let is_b64 = request.response_format.as_deref() != Some("url");
     let socket = resolve_runtime_socket();
-    let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
 
     let mut data = Vec::with_capacity(count);
     for i in 0..count {
         let seed = now.wrapping_mul(1000).wrapping_add(i as u64);
-        match call_generate_visual(&socket, prompt, request.model.as_deref(), width, height, seed).await {
+        match call_generate_visual(
+            &socket,
+            prompt,
+            request.model.as_deref(),
+            width,
+            height,
+            seed,
+        )
+        .await
+        {
             Ok(params) => {
-                let img_path = params.get("image_path").and_then(|v| v.as_str()).unwrap_or("");
+                let img_path = params
+                    .get("image_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 if is_b64 {
                     match tokio::fs::read(img_path).await {
                         Ok(b) => data.push(ImageObject {
@@ -161,7 +162,11 @@ pub async fn image_generations_handler(
                         }),
                         Err(e) => {
                             error!("Read image failed: {e}");
-                            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": {"message": e.to_string()}}))).into_response();
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(json!({"error": {"message": e.to_string()}})),
+                            )
+                                .into_response();
                         }
                     }
                 } else {
@@ -174,24 +179,44 @@ pub async fn image_generations_handler(
             }
             Err(e) => {
                 error!("GenerateVisual failed: {e}");
-                return (StatusCode::BAD_GATEWAY, Json(json!({"error": {"message": e, "type": "runtime_gateway_error"}}))).into_response();
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({"error": {"message": e, "type": "runtime_gateway_error"}})),
+                )
+                    .into_response();
             }
         }
     }
 
     debug!("Generated {} images for '{prompt}'", data.len());
-    (StatusCode::OK, Json(ImageGenerationResponse { created: now, data })).into_response()
+    (
+        StatusCode::OK,
+        Json(ImageGenerationResponse { created: now, data }),
+    )
+        .into_response()
 }
 
 pub async fn image_edits_handler(
     State(engine): State<Arc<RouterEngine>>,
     Json(request): Json<ImageEditRequest>,
 ) -> Response {
-    let prompt = request.prompt.as_deref().unwrap_or("image edit pass").to_string();
+    let img_raw = request.image.as_deref().unwrap_or("").trim();
+    if img_raw.is_empty() {
+        return bad_request("image is required");
+    }
+    let is_file = img_raw.starts_with("file://") || Path::new(img_raw).exists();
+    if !is_file && base64_decode(img_raw).is_none() {
+        return bad_request("invalid base64 image data");
+    }
+    let prompt = request.prompt.as_deref().unwrap_or("").trim();
+    if prompt.is_empty() {
+        return bad_request("prompt is required");
+    }
+
     image_generations_handler(
         State(engine),
         Json(ImageGenerationRequest {
-            prompt,
+            prompt: prompt.to_string(),
             model: request.model,
             n: request.n,
             size: request.size,
@@ -207,9 +232,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_base64_and_dimensions() {
+    fn test_images_reexports_codec() {
         assert_eq!(base64_encode(b"foo"), "Zm9v");
-        assert_eq!(parse_dimensions(Some("1024x1024")), (1024, 1024));
-        assert_eq!(parse_dimensions(None), (512, 512));
+        assert_eq!(parse_dimensions(None), Ok((512, 512)));
     }
 }

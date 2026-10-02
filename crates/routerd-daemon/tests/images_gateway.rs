@@ -56,7 +56,9 @@ async fn test_images_generations_and_edits_flow() {
     let dir = tempdir().unwrap();
     let sock_path = dir.path().join("mock_runtime.sock");
     let img_path = dir.path().join("test_img.png");
-    tokio::fs::write(&img_path, b"\x89PNG\r\n\x1a\n").await.unwrap();
+    tokio::fs::write(&img_path, b"\x89PNG\r\n\x1a\n")
+        .await
+        .unwrap();
 
     let listener = UnixListener::bind(&sock_path).unwrap();
     run_mock_runtime_server(listener, img_path.to_string_lossy().to_string()).await;
@@ -111,15 +113,20 @@ async fn test_images_generations_and_edits_flow() {
     let body_url = res_url.into_body().collect().await.unwrap().to_bytes();
     let val_url: Value = serde_json::from_slice(&body_url).unwrap();
     let data_url = val_url.get("data").and_then(|d| d.as_array()).unwrap();
-    assert!(data_url[0].get("url").and_then(|u| u.as_str()).unwrap().starts_with("file://"));
+    assert!(data_url[0]
+        .get("url")
+        .and_then(|u| u.as_str())
+        .unwrap()
+        .starts_with("file://"));
 
-    // Test 3: Edits endpoint
+    // Test 3: Edits endpoint with valid base64 image
     let req_edit = Request::builder()
         .method("POST")
         .uri("/v1/images/edits")
         .header("content-type", "application/json")
         .body(Body::from(
             json!({
+                "image": "Zm9v",
                 "prompt": "Add subtle neon glow",
                 "response_format": "b64_json"
             })
@@ -145,4 +152,54 @@ async fn test_images_generations_and_edits_flow() {
 
     let res_bad = app.clone().oneshot(req_bad).await.unwrap();
     assert_eq!(res_bad.status(), StatusCode::BAD_REQUEST);
+
+    // Test 5: Edits missing image parameter
+    let req_no_img = Request::builder()
+        .method("POST")
+        .uri("/v1/images/edits")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "prompt": "Missing image input"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+
+    let res_no_img = app.clone().oneshot(req_no_img).await.unwrap();
+    assert_eq!(res_no_img.status(), StatusCode::BAD_REQUEST);
+
+    // Test 6: Edits with invalid base64 image
+    let req_corrupt_b64 = Request::builder()
+        .method("POST")
+        .uri("/v1/images/edits")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "image": "not-valid-base64!",
+                "prompt": "Fix corrupted image"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+
+    let res_corrupt_b64 = app.clone().oneshot(req_corrupt_b64).await.unwrap();
+    assert_eq!(res_corrupt_b64.status(), StatusCode::BAD_REQUEST);
+
+    // Test 7: Invalid size rejection
+    let req_bad_size = Request::builder()
+        .method("POST")
+        .uri("/v1/images/generations")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({
+                "prompt": "A mountain",
+                "size": "9999x9999"
+            })
+            .to_string(),
+        ))
+        .unwrap();
+
+    let res_bad_size = app.clone().oneshot(req_bad_size).await.unwrap();
+    assert_eq!(res_bad_size.status(), StatusCode::BAD_REQUEST);
 }
