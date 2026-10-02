@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "9e811e7",
+ "rev": "779a0a0",
  "dirty": true,
  "pages": [
   {
@@ -365,7 +365,7 @@
    "lines": 68,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 24
+   "reach": 25
   },
   {
    "path": "./crates/routerd-core/src/lib.rs",
@@ -648,6 +648,13 @@
    "reach": 2
   },
   {
+   "path": "./crates/routerd-daemon/src/gateway/audio.rs",
+   "lines": 242,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
    "path": "./crates/routerd-daemon/src/gateway/chat.rs",
    "lines": 112,
    "bin_bytes": null,
@@ -666,7 +673,7 @@
    "lines": 89,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 1
+   "reach": 2
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/images.rs",
@@ -677,7 +684,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 29,
+   "lines": 35,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -751,6 +758,13 @@
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 3
+  },
+  {
+   "path": "./crates/routerd-daemon/tests/audio_gateway.rs",
+   "lines": 173,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
   },
   {
    "path": "./crates/routerd-daemon/tests/images_gateway.rs",

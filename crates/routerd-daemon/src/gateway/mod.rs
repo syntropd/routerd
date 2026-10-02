@@ -1,3 +1,4 @@
+pub mod audio;
 pub mod chat;
 pub mod health;
 pub mod images;
@@ -18,6 +19,11 @@ pub fn create_gateway_router(engine: Arc<RouterEngine>) -> Router {
             post(images::image_generations_handler),
         )
         .route("/v1/images/edits", post(images::image_edits_handler))
+        .route(
+            "/v1/audio/transcriptions",
+            post(audio::audio_transcriptions_handler),
+        )
+        .route("/v1/audio/speech", post(audio::audio_speech_handler))
         .route("/v1/models", get(models_handler))
         .route("/health", get(health::health_handler))
         .with_state(engine)
