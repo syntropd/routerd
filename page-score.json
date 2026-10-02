@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "de899a8",
+ "rev": "8cb1564",
  "dirty": false,
  "pages": [
   {
@@ -57,7 +57,7 @@
    "lines": 72,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 32
+   "reach": 33
   },
   {
    "path": "./crates/routerctl/src/commands/catalog/mod.rs",
@@ -579,7 +579,7 @@
   },
   {
    "path": "./crates/routerd-core/src/telemetry/pressure_types.rs",
-   "lines": 219,
+   "lines": 239,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
@@ -629,6 +629,13 @@
   {
    "path": "./crates/routerd-core/tests/runtimed_adapter.rs",
    "lines": 231,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
+   "path": "./crates/routerd-core/tests/runtimed_telemetry_pressure.rs",
+   "lines": 125,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
