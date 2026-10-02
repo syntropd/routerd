@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "8cb1564",
+ "rev": "6b05e95",
  "dirty": false,
  "pages": [
   {
@@ -579,7 +579,7 @@
   },
   {
    "path": "./crates/routerd-core/src/telemetry/pressure_types.rs",
-   "lines": 239,
+   "lines": 237,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
