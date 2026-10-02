@@ -2,6 +2,8 @@
 
 pub mod cascade_router;
 pub mod elastic_downgrade;
+pub mod leviathan;
 
 pub use cascade_router::{CascadeDecision, CascadeRouter};
 pub use elastic_downgrade::{DowngradeDecision, ElasticFamilyDowngrader, FamilyLadder, VramPressureLevel};
+pub use leviathan::{sample_leviathan_speculation, LeviathanSampleResult, SpeculativePair};

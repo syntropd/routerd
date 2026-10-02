@@ -64,3 +64,23 @@ cost_per_output_token = 0.0
 avg_latency_ms = 40.0
 tokens_per_second = 300.0
 tier = "fast"
+
+[[providers.models]]
+name = "deepseek-r1-distill-qwen-1.5b"
+draft_model = "deepseek-r1-distill-qwen-1.5b"
+max_context_tokens = 32768
+cost_per_input_token = 0.0
+cost_per_output_token = 0.0
+avg_latency_ms = 30.0
+tokens_per_second = 250.0
+tier = "fast"
+
+[[providers.models]]
+name = "deepseek-r1-distill-qwen-14b"
+draft_model = "deepseek-r1-distill-qwen-1.5b"
+max_context_tokens = 32768
+cost_per_input_token = 0.0
+cost_per_output_token = 0.0
+avg_latency_ms = 70.0
+tokens_per_second = 120.0
+tier = "hard"
