@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "e62ec4c",
+ "rev": "b376ad3",
  "dirty": false,
  "pages": [
   {
@@ -459,8 +459,15 @@
    "reach": 1
   },
   {
+   "path": "./crates/routerd-core/src/router/cascade/leviathan.rs",
+   "lines": 219,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
    "path": "./crates/routerd-core/src/router/cascade/mod.rs",
-   "lines": 7,
+   "lines": 9,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
