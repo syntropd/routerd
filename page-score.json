@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "c4e8336",
- "dirty": true,
+ "rev": "de899a8",
+ "dirty": false,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -229,7 +229,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/chat_completion.rs",
-   "lines": 254,
+   "lines": 251,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -243,7 +243,7 @@
   },
   {
    "path": "./crates/routerd-core/src/adapters/runtimed/engine_call.rs",
-   "lines": 218,
+   "lines": 225,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
@@ -579,10 +579,10 @@
   },
   {
    "path": "./crates/routerd-core/src/telemetry/pressure_types.rs",
-   "lines": 80,
+   "lines": 219,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 1
+   "reach": 2
   },
   {
    "path": "./crates/routerd-core/src/telemetry/query_hardware.rs",
