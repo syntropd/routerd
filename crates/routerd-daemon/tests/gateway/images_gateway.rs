@@ -53,6 +53,7 @@ async fn run_mock_runtime_server(listener: UnixListener, img_file: String) {
 
 #[tokio::test]
 async fn test_images_generations_and_edits_flow() {
+    let _lock = crate::audio_gateway::RUNTIME_ENV_LOCK.lock().await;
     let dir = tempdir().unwrap();
     let sock_path = dir.path().join("mock_runtime.sock");
     let img_path = dir.path().join("test_img.png");
@@ -202,4 +203,6 @@ async fn test_images_generations_and_edits_flow() {
 
     let res_bad_size = app.clone().oneshot(req_bad_size).await.unwrap();
     assert_eq!(res_bad_size.status(), StatusCode::BAD_REQUEST);
+
+    std::env::remove_var("SYNTROP_RUNTIME_SOCKET");
 }

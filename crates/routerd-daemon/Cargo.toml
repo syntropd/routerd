@@ -7,6 +7,7 @@ license.workspace = true
 authors.workspace = true
 repository = "https://github.com/syntropd/routerd"
 description = "Intelligent model router, difficulty-tier evaluation, and wire protocol gateway daemon for syntropd"
+autotests = false
 
 [lib]
 name = "routerd_daemon"
@@ -15,6 +16,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "routerd"
 path = "src/main.rs"
+
+[[test]]
+name = "gateway_tests"
+path = "tests/gateway.rs"
 
 [dependencies]
 routerd-core = { workspace = true }

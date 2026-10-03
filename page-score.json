@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "d1c747b",
+ "rev": "2ad1dda",
  "dirty": false,
  "pages": [
   {
@@ -634,14 +634,21 @@
    "reach": 0
   },
   {
-   "path": "./crates/routerd-core/tests/runtimed_adapter.rs",
+   "path": "./crates/routerd-core/tests/integration.rs",
+   "lines": 4,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
+   "path": "./crates/routerd-core/tests/integration/runtimed_adapter.rs",
    "lines": 231,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
-   "path": "./crates/routerd-core/tests/runtimed_telemetry_pressure.rs",
+   "path": "./crates/routerd-core/tests/integration/runtimed_telemetry_pressure.rs",
    "lines": 125,
    "bin_bytes": null,
    "heat_pct": null,
@@ -774,18 +781,25 @@
    "reach": 3
   },
   {
-   "path": "./crates/routerd-daemon/tests/audio_gateway.rs",
-   "lines": 202,
+   "path": "./crates/routerd-daemon/tests/gateway/audio_gateway.rs",
+   "lines": 207,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
+   "path": "./crates/routerd-daemon/tests/gateway/images_gateway.rs",
+   "lines": 208,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
-   "path": "./crates/routerd-daemon/tests/images_gateway.rs",
-   "lines": 205,
+   "path": "./crates/routerd-daemon/tests/gateway.rs",
+   "lines": 4,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 0
+   "reach": 4
   },
   {
    "path": "./qa/tests/cli_tests.rs",

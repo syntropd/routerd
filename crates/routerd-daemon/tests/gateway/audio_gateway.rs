@@ -62,8 +62,11 @@ async fn run_mock_runtime_audio_server(listener: UnixListener) {
     });
 }
 
+pub(crate) static RUNTIME_ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 #[tokio::test]
 async fn test_audio_transcriptions_and_speech_flow() {
+    let _lock = RUNTIME_ENV_LOCK.lock().await;
     let dir = tempdir().unwrap();
     let sock_path = dir.path().join("mock_audio_runtime.sock");
 
@@ -199,4 +202,6 @@ async fn test_audio_transcriptions_and_speech_flow() {
     let body_mp = res_mp.into_body().collect().await.unwrap().to_bytes();
     let val_mp: Value = serde_json::from_slice(&body_mp).unwrap();
     assert_eq!(val_mp["text"], "syntrop transcribed speech stream");
+
+    std::env::remove_var("SYNTROP_RUNTIME_SOCKET");
 }

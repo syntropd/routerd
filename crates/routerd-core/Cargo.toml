@@ -7,10 +7,15 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 description = "Core routing engine, scoring formulas, telemetry, and protocol adapters for syntrop-routerd"
+autotests = false
 
 [lib]
 name = "routerd_core"
 path = "src/lib.rs"
+
+[[test]]
+name = "integration_tests"
+path = "tests/integration.rs"
 
 [dependencies]
 rustix = { workspace = true }
