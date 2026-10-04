@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 routerd-core = { workspace = true }
-routerd-daemon = { package = "syntrop-routerd", version = "0.5.0", path = "../crates/routerd-daemon" }
+routerd-daemon = { package = "syntrop-routerd", version = "0.6.0", path = "../crates/routerd-daemon" }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
