@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "2ad1dda",
- "dirty": false,
+ "rev": "d55e821",
+ "dirty": true,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -683,13 +683,6 @@
    "reach": 1
   },
   {
-   "path": "./crates/routerd-daemon/src/gateway/health.rs",
-   "lines": 31,
-   "bin_bytes": null,
-   "heat_pct": null,
-   "reach": 1
-  },
-  {
    "path": "./crates/routerd-daemon/src/gateway/images_codec.rs",
    "lines": 89,
    "bin_bytes": null,
@@ -705,7 +698,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 36,
+   "lines": 64,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -713,6 +706,13 @@
   {
    "path": "./crates/routerd-daemon/src/gateway/sse_transform.rs",
    "lines": 226,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/systemone.rs",
+   "lines": 132,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
