@@ -127,6 +127,16 @@ impl RouterEngine {
                 None => continue,
             };
 
+            // Interleave 512-token chunked prompt prefill pipelining during stream dispatch
+            if req_profile.estimated_prompt_tokens > crate::mesh::PREFILL_CHUNK_SIZE {
+                let dispatcher = crate::mesh::PrefillPipelineDispatcher::new(req_profile.estimated_prompt_tokens);
+                debug!(
+                    "Streaming prompt tokens ({}) exceed PREFILL_CHUNK_SIZE (512); interleaving pipelined prefill dispatcher with in-flight chunk bounds",
+                    dispatcher.total_tokens
+                );
+                tokio::task::yield_now().await;
+            }
+
             match entry.adapter.chat_completion_stream(&scored.model_name, &req).await {
                 Ok(stream) => {
                     let mut st = entry.stats.write().await;
