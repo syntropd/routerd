@@ -1,6 +1,6 @@
 {
  "repo": "routerd",
- "rev": "54059d5",
+ "rev": "16e240e",
  "dirty": false,
  "pages": [
   {
@@ -481,7 +481,7 @@
   },
   {
    "path": "./crates/routerd-core/src/router/dispatch_stream.rs",
-   "lines": 159,
+   "lines": 169,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
