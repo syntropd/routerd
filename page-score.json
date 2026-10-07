@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "d55e821",
- "dirty": true,
+ "rev": "559a45f",
+ "dirty": false,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -383,7 +383,7 @@
   },
   {
    "path": "./crates/routerd-core/src/mesh/mod.rs",
-   "lines": 21,
+   "lines": 22,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
@@ -397,7 +397,7 @@
   },
   {
    "path": "./crates/routerd-core/src/mesh/pipeline_circuit.rs",
-   "lines": 146,
+   "lines": 196,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
