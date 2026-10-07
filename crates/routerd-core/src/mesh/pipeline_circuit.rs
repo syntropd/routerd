@@ -1,8 +1,8 @@
 //! Chunked prefill pipelining, circuit breakers, and atomic prefill replay.
 
-pub const PREFILL_CHUNK_SIZE: usize = 1024;
+pub const PREFILL_CHUNK_SIZE: usize = 512;
 
-/// Partition a sequence of prompt tokens into 1024-token micro-batches.
+/// Partition a sequence of prompt tokens into 512-token micro-batches.
 pub fn chunk_prefill_tokens(tokens: &[u32]) -> Vec<Vec<u32>> {
     tokens
         .chunks(PREFILL_CHUNK_SIZE)
@@ -96,18 +96,49 @@ impl PrefillReplayBuffer {
     }
 }
 
+/// Pipelined chunked prefill stream dispatcher interleaving prompt ingestion with decoding.
+#[derive(Debug, Clone)]
+pub struct PrefillPipelineDispatcher {
+    pub chunk_size: usize,
+    pub total_tokens: usize,
+    pub in_flight_chunks: usize,
+}
+
+impl PrefillPipelineDispatcher {
+    pub fn new(total_tokens: usize) -> Self {
+        Self {
+            chunk_size: PREFILL_CHUNK_SIZE,
+            total_tokens,
+            in_flight_chunks: 0,
+        }
+    }
+
+    pub fn chunks(&self, tokens: &[u32]) -> Vec<Vec<u32>> {
+        chunk_prefill_tokens(tokens)
+    }
+
+    pub fn next_chunk_tokens<'a>(&self, tokens: &'a [u32], offset: usize) -> Option<&'a [u32]> {
+        if offset >= tokens.len() {
+            None
+        } else {
+            let end = (offset + self.chunk_size).min(tokens.len());
+            Some(&tokens[offset..end])
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_chunked_prefill_1024_microbatches() {
+    fn test_chunked_prefill_512_microbatches() {
         let tokens: Vec<u32> = (0..2500).collect();
         let chunks = chunk_prefill_tokens(&tokens);
-        assert_eq!(chunks.len(), 3);
-        assert_eq!(chunks[0].len(), 1024);
-        assert_eq!(chunks[1].len(), 1024);
-        assert_eq!(chunks[2].len(), 452);
+        assert_eq!(chunks.len(), 5);
+        assert_eq!(chunks[0].len(), 512);
+        assert_eq!(chunks[1].len(), 512);
+        assert_eq!(chunks[4].len(), 452);
     }
 
     #[test]
@@ -142,5 +173,24 @@ mod tests {
         assert_eq!(pending_second.len(), 1);
         assert_eq!(pending_second[0].0, 2);
         assert_eq!(replay.target_node, "node-gamma");
+    }
+
+    #[test]
+    fn test_prefill_pipeline_dispatcher() {
+        let tokens: Vec<u32> = (0..1200).collect();
+        let dispatcher = PrefillPipelineDispatcher::new(tokens.len());
+        let chunks = dispatcher.chunks(&tokens);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].len(), 512);
+        assert_eq!(chunks[1].len(), 512);
+        assert_eq!(chunks[2].len(), 176);
+
+        let slice0 = dispatcher.next_chunk_tokens(&tokens, 0).unwrap();
+        assert_eq!(slice0.len(), 512);
+        let slice1 = dispatcher.next_chunk_tokens(&tokens, 512).unwrap();
+        assert_eq!(slice1.len(), 512);
+        let slice2 = dispatcher.next_chunk_tokens(&tokens, 1024).unwrap();
+        assert_eq!(slice2.len(), 176);
+        assert!(dispatcher.next_chunk_tokens(&tokens, 1200).is_none());
     }
 }
