@@ -1,7 +1,8 @@
 //! Universal Standard Gateway HTTP Router for syntropd.
 //!
 //! Exposes standard OpenAI-compatible endpoints across all multimodal engines:
-//! text, images, speech, audio/music, video, embeddings, and reflex decisions.
+//! text, images, speech, audio/music, video, embeddings, and reflex decisions,
+//! while reverse-proxying non-API studio/gallery traffic to the local studio worker.
 
 pub mod audio;
 pub mod chat;
@@ -12,9 +13,9 @@ pub mod systemone;
 pub mod video;
 
 use crate::rss::MemoryStats;
-use axum::extract::State;
+use axum::extract::{Request, State};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use routerd_core::{ModelListResponse, RouterEngine};
@@ -43,6 +44,7 @@ pub fn create_gateway_router(engine: Arc<RouterEngine>) -> Router {
         .route("/v1/systemone", post(systemone::systemone_handler))
         .route("/v1/models", get(models_handler))
         .route("/health", get(health_handler))
+        .fallback(fallback_studio_proxy)
         .with_state(engine)
 }
 
@@ -72,4 +74,41 @@ pub async fn health_handler(State(engine): State<Arc<RouterEngine>>) -> impl Int
     });
 
     (StatusCode::OK, Json(body))
+}
+
+pub async fn fallback_studio_proxy(req: Request) -> Response {
+    let method = req.method().clone();
+    let uri = req.uri().clone();
+    let path_and_query = uri.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+    let target_url = format!("http://127.0.0.1:19820{path_and_query}");
+
+    let client = reqwest::Client::new();
+    let mut builder = client.request(method, &target_url);
+    for (k, v) in req.headers() {
+        if k != "host" {
+            builder = builder.header(k, v);
+        }
+    }
+    let body_bytes = match axum::body::to_bytes(req.into_body(), 10 * 1024 * 1024).await {
+        Ok(b) => b,
+        Err(e) => return (StatusCode::BAD_REQUEST, e.to_string()).into_response(),
+    };
+    if !body_bytes.is_empty() {
+        builder = builder.body(body_bytes);
+    }
+
+    match builder.send().await {
+        Ok(resp) => {
+            let status = StatusCode::from_u16(resp.status().as_u16()).unwrap_or(StatusCode::OK);
+            let mut response_builder = Response::builder().status(status);
+            for (k, v) in resp.headers() {
+                response_builder = response_builder.header(k, v);
+            }
+            let bytes = resp.bytes().await.unwrap_or_default();
+            response_builder
+                .body(axum::body::Body::from(bytes))
+                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+        }
+        Err(_) => (StatusCode::NOT_FOUND, "Not found").into_response(),
+    }
 }

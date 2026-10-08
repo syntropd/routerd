@@ -134,14 +134,14 @@ async fn main() -> Result<()> {
 
         // Try dual-stack IPv6 if listening on localhost or all interfaces
         if listen_tcp.starts_with("127.0.0.1:") {
-            let port = listen_tcp.split(':').nth(1).unwrap_or("8000");
+            let port = listen_tcp.split(':').nth(1).unwrap_or("1982");
             let v6_addr = format!("[::1]:{}", port);
             if let Ok(l) = bind_standalone_tcp(&v6_addr).await {
                 info!("Binding standalone IPv6 TCP gateway at {}", v6_addr);
                 tcp_listeners.push(l);
             }
         } else if listen_tcp.starts_with("0.0.0.0:") {
-            let port = listen_tcp.split(':').nth(1).unwrap_or("8000");
+            let port = listen_tcp.split(':').nth(1).unwrap_or("1982");
             let v6_addr = format!("[::]:{}", port);
             if let Ok(l) = bind_standalone_tcp(&v6_addr).await {
                 info!("Binding standalone IPv6 TCP gateway at {}", v6_addr);

@@ -17,7 +17,7 @@ pub struct DaemonConfig {
 }
 
 fn default_listen_tcp() -> String {
-    "0.0.0.0:8000".to_string()
+    "0.0.0.0:1982".to_string()
 }
 fn default_listen_unix() -> String {
     "/run/syntrop/router.sock".to_string()

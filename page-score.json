@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "b36068f",
- "dirty": false,
+ "rev": "c34903f",
+ "dirty": true,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -719,7 +719,7 @@
   },
   {
    "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 75,
+   "lines": 114,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
