@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "c46e25e",
- "dirty": true,
+ "rev": "b36068f",
+ "dirty": false,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
