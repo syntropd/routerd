@@ -1,7 +1,7 @@
 {
  "repo": "routerd",
- "rev": "16e240e",
- "dirty": false,
+ "rev": "c46e25e",
+ "dirty": true,
  "pages": [
   {
    "path": "./crates/routerctl/src/client/benchmark_probe.rs",
@@ -57,7 +57,7 @@
    "lines": 72,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 33
+   "reach": 34
   },
   {
    "path": "./crates/routerctl/src/commands/catalog/mod.rs",
@@ -365,7 +365,7 @@
    "lines": 68,
    "bin_bytes": null,
    "heat_pct": null,
-   "reach": 25
+   "reach": 27
   },
   {
    "path": "./crates/routerd-core/src/lib.rs",
@@ -662,57 +662,78 @@
    "reach": 2
   },
   {
-   "path": "./crates/routerd-daemon/src/gateway/audio_codec.rs",
-   "lines": 117,
-   "bin_bytes": null,
-   "heat_pct": null,
-   "reach": 1
-  },
-  {
    "path": "./crates/routerd-daemon/src/gateway/audio.rs",
-   "lines": 209,
-   "bin_bytes": null,
-   "heat_pct": null,
-   "reach": 1
-  },
-  {
-   "path": "./crates/routerd-daemon/src/gateway/chat.rs",
-   "lines": 112,
-   "bin_bytes": null,
-   "heat_pct": null,
-   "reach": 1
-  },
-  {
-   "path": "./crates/routerd-daemon/src/gateway/images_codec.rs",
-   "lines": 89,
+   "lines": 220,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 2
   },
   {
-   "path": "./crates/routerd-daemon/src/gateway/images.rs",
-   "lines": 239,
-   "bin_bytes": null,
-   "heat_pct": null,
-   "reach": 1
-  },
-  {
-   "path": "./crates/routerd-daemon/src/gateway/mod.rs",
-   "lines": 64,
+   "path": "./crates/routerd-daemon/src/gateway/chat/mod.rs",
+   "lines": 149,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 0
   },
   {
-   "path": "./crates/routerd-daemon/src/gateway/sse_transform.rs",
+   "path": "./crates/routerd-daemon/src/gateway/chat/sse_transform.rs",
    "lines": 226,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1
   },
   {
+   "path": "./crates/routerd-daemon/src/gateway/codec/audio.rs",
+   "lines": 116,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 2
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/codec/images.rs",
+   "lines": 89,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 4
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/codec/mod.rs",
+   "lines": 19,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/embeddings.rs",
+   "lines": 131,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/images.rs",
+   "lines": 239,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 4
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/mod.rs",
+   "lines": 75,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 0
+  },
+  {
    "path": "./crates/routerd-daemon/src/gateway/systemone.rs",
    "lines": 132,
+   "bin_bytes": null,
+   "heat_pct": null,
+   "reach": 1
+  },
+  {
+   "path": "./crates/routerd-daemon/src/gateway/video.rs",
+   "lines": 136,
    "bin_bytes": null,
    "heat_pct": null,
    "reach": 1

@@ -5,8 +5,8 @@ PartOf=routerd.service
 
 [Socket]
 # File Descriptor 3: TCP dual-stack HTTP reverse proxy
-ListenStream=127.0.0.1:32768
-ListenStream=[::1]:32768
+ListenStream=0.0.0.0:8000
+ListenStream=[::]:8000
 
 # File Descriptor 4/5: Local Unix domain socket reverse proxy
 ListenStream=/run/syntrop/router.sock

@@ -1,10 +1,15 @@
+//! Universal Standard Gateway HTTP Router for syntropd.
+//!
+//! Exposes standard OpenAI-compatible endpoints across all multimodal engines:
+//! text, images, speech, audio/music, video, embeddings, and reflex decisions.
+
 pub mod audio;
-pub mod audio_codec;
 pub mod chat;
+pub mod codec;
+pub mod embeddings;
 pub mod images;
-pub mod images_codec;
-pub mod sse_transform;
 pub mod systemone;
+pub mod video;
 
 use crate::rss::MemoryStats;
 use axum::extract::State;
@@ -18,17 +23,23 @@ use std::sync::Arc;
 
 pub fn create_gateway_router(engine: Arc<RouterEngine>) -> Router {
     Router::new()
+        // Text LLM (Chat & Legacy Completion)
         .route("/v1/chat/completions", post(chat::chat_completions_handler))
-        .route(
-            "/v1/images/generations",
-            post(images::image_generations_handler),
-        )
+        .route("/v1/completions", post(chat::completions_handler))
+        // Embeddings
+        .route("/v1/embeddings", post(embeddings::embeddings_handler))
+        // Visual (Generative Images & Inpainting)
+        .route("/v1/images/generations", post(images::image_generations_handler))
         .route("/v1/images/edits", post(images::image_edits_handler))
-        .route(
-            "/v1/audio/transcriptions",
-            post(audio::audio_transcriptions_handler),
-        )
+        // Speech & Audio Transcription / TTS / Generative Music
+        .route("/v1/audio/transcriptions", post(audio::audio_transcriptions_handler))
         .route("/v1/audio/speech", post(audio::audio_speech_handler))
+        .route("/v1/audio/generations", post(audio::audio_generations_handler))
+        .route("/v1/audio/music", post(audio::audio_generations_handler))
+        // Video Generation
+        .route("/v1/video/generations", post(video::video_generations_handler))
+        .route("/v1/videos/generations", post(video::video_generations_handler))
+        // Fast Reflexive Decisions & Catalog
         .route("/v1/systemone", post(systemone::systemone_handler))
         .route("/v1/models", get(models_handler))
         .route("/health", get(health_handler))

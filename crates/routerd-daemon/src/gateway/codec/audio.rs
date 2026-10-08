@@ -106,7 +106,6 @@ mod tests {
         body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
         body.extend_from_slice(b"Content-Disposition: form-data; name=\"file\"; filename=\"test.pcm\"\r\n");
         body.extend_from_slice(b"Content-Type: application/octet-stream\r\n\r\n");
-        // Binary payload containing multiple \r\n (0x0D, 0x0A) sequences
         let binary_data = vec![0x01, 0x0D, 0x0A, 0x02, 0x0D, 0x0A, 0x03, 0x04];
         body.extend_from_slice(&binary_data);
         body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());

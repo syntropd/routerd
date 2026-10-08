@@ -9,7 +9,7 @@ fn test_template_config_parsing() {
     let template = include_str!("../../crates/routerd-core/systemd/routerd.toml");
     let cfg = RouterConfig::load_from_str(template).expect("Default routerd.toml must parse cleanly");
 
-    assert_eq!(cfg.daemon.listen_tcp, "127.0.0.1:32768");
+    assert_eq!(cfg.daemon.listen_tcp, "0.0.0.0:8000");
     assert_eq!(cfg.daemon.varlink_socket, "/run/syntrop/io.syntrop.Router1");
     assert_eq!(cfg.thresholds.min_tokens_per_second, 10.0);
     assert_eq!(cfg.providers.len(), 2);

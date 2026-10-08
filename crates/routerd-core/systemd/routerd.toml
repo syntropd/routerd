@@ -2,7 +2,7 @@
 # Systemd routerd configuration template
 
 [daemon]
-listen_tcp = "127.0.0.1:32768"
+listen_tcp = "0.0.0.0:8000"
 listen_unix = "/run/syntrop/router.sock"
 varlink_socket = "/run/syntrop/io.syntrop.Router1"
 inferenced_socket = "/run/syntrop/io.syntrop.Inference1"

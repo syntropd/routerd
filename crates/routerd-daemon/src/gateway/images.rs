@@ -51,7 +51,7 @@ pub struct ImageGenerationResponse {
     pub data: Vec<ImageObject>,
 }
 
-pub use super::images_codec::{base64_decode, base64_encode, parse_dimensions};
+pub use super::codec::images::{base64_decode, base64_encode, parse_dimensions};
 
 fn resolve_runtime_socket() -> PathBuf {
     std::env::var("SYNTROP_RUNTIME_SOCKET")

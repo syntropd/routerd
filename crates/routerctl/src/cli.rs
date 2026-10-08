@@ -10,7 +10,7 @@ pub struct Cli {
     #[arg(short, long, default_value = "/run/syntrop/io.syntrop.Router1", global = true)]
     pub socket: PathBuf,
 
-    #[arg(long, default_value = "http://127.0.0.1:32768", global = true)]
+    #[arg(long, default_value = "http://127.0.0.1:8000", global = true)]
     pub http_url: String,
 
     #[arg(long, global = true)]
